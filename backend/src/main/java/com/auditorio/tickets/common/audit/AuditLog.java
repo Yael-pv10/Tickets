@@ -2,6 +2,8 @@ package com.auditorio.tickets.common.audit;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -37,6 +39,7 @@ public class AuditLog {
     @Column(name = "user_agent", length = 300)
     private String userAgent;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String metadata;
 

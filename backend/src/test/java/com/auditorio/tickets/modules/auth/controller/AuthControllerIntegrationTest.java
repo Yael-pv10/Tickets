@@ -1,7 +1,7 @@
 package com.auditorio.tickets.modules.auth.controller;
 
 import com.auditorio.tickets.AbstractIntegrationTest;
-import com.auditorio.tickets.modules.auth.dto.AuthResponse;
+import com.auditorio.tickets.common.audit.AuditLogRepository;
 import com.auditorio.tickets.modules.auth.dto.LoginRequest;
 import com.auditorio.tickets.modules.auth.dto.RegisterRequest;
 import com.auditorio.tickets.modules.auth.repository.RefreshTokenRepository;
@@ -34,9 +34,11 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired UserRepository userRepository;
     @Autowired RefreshTokenRepository refreshTokenRepository;
+    @Autowired AuditLogRepository auditLogRepository;
 
     @BeforeEach
     void cleanDatabase() {
+        auditLogRepository.deleteAll();
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
     }

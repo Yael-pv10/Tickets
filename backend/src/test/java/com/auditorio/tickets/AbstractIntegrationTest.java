@@ -1,14 +1,13 @@
 package com.auditorio.tickets;
 
+import com.auditorio.tickets.config.SyncAsyncTestConfig;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,13 +31,20 @@ import java.util.Base64;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Testcontainers
+@Import(SyncAsyncTestConfig.class)
 public abstract class AbstractIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("postgres:16-alpine");
+    // Singleton container pattern: started once per JVM via static initializer,
+    // shared across all test classes. Testcontainers' Ryuk daemon cleans it up
+    // when the JVM exits. We use @DynamicPropertySource (instead of
+    // @ServiceConnection, which requires @Container-managed lifecycle) so Spring
+    // picks up the dynamically allocated JDBC URL.
+    static final PostgreSQLContainer<?> POSTGRES;
+
+    static {
+        POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+        POSTGRES.start();
+    }
 
     private static final Path PRIVATE_KEY_PATH;
     private static final Path PUBLIC_KEY_PATH;
@@ -65,7 +71,10 @@ public abstract class AbstractIntegrationTest {
     }
 
     @DynamicPropertySource
-    static void jwtKeyPaths(DynamicPropertyRegistry registry) {
+    static void datasourceAndJwtProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("app.jwt.private-key-path", PRIVATE_KEY_PATH::toString);
         registry.add("app.jwt.public-key-path", PUBLIC_KEY_PATH::toString);
     }
