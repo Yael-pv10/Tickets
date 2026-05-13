@@ -152,15 +152,37 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <version>1.20.3</version>
+            <version>1.21.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>1.20.3</version>
+            <version>1.21.3</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+          Testcontainers 1.21.x ships with docker-java 3.4.x, which negotiates with
+          Docker API 1.32 and is rejected by Docker engines >= 29 (min API 1.40).
+          Pin a newer docker-java that uses a modern API version.
+        -->
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-api</artifactId>
+            <version>3.5.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-zerodep</artifactId>
+            <version>3.5.3</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -177,6 +199,20 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                      Testcontainers' bundled docker-java client negotiates with an old API
+                      version (1.32) that recent Docker daemons (>= 29.x) reject. Force a
+                      modern API version supported by both local engines and GitHub Actions
+                      runners. The system property is honored by docker-java; env vars are
+                      not propagated reliably here.
+                    -->
+                    <argLine>-Dapi.version=1.43</argLine>
                 </configuration>
             </plugin>
             <plugin>
