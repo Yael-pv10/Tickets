@@ -1,0 +1,183 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --grain-opacity: 0.045;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background: #0A0A12;
+    color: #F5EFE0;
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Selección con tinte oro */
+  ::selection {
+    background: #E8B14B;
+    color: #0A0A12;
+  }
+
+  /* Scrollbar fino y discreto */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #2A2A3D;
+    border-radius: 4px;
+    border: 2px solid #0A0A12;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #3A3A4F; }
+
+  /* Foco accesible y on-brand */
+  :focus-visible {
+    outline: 2px solid #E8B14B;
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Textura de grano sobre cualquier capa: granos sutiles tipo celuloide */
+  .grain::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    opacity: var(--grain-opacity);
+    mix-blend-mode: overlay;
+  }
+
+  /* Etiqueta tipo marquesina (uppercase, tracking exagerado) */
+  .eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-marquee text-gold-dim;
+  }
+
+  /* Subrayado en oro tipo separador deco */
+  .deco-rule {
+    background: linear-gradient(90deg, transparent, rgba(232, 177, 75, 0.5), transparent);
+    height: 1px;
+  }
+
+  /* Marco deco con cuatro esquinas en oro */
+  .deco-frame {
+    position: relative;
+  }
+  .deco-frame::before,
+  .deco-frame::after,
+  .deco-frame > .deco-corner-1,
+  .deco-frame > .deco-corner-2 {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: #E8B14B;
+    pointer-events: none;
+  }
+  .deco-frame::before {
+    top: -1px; left: -1px;
+    border-top: 1px solid; border-left: 1px solid;
+  }
+  .deco-frame::after {
+    top: -1px; right: -1px;
+    border-top: 1px solid; border-right: 1px solid;
+  }
+  .deco-frame > .deco-corner-1 {
+    bottom: -1px; left: -1px;
+    border-bottom: 1px solid #E8B14B;
+    border-left: 1px solid #E8B14B;
+  }
+  .deco-frame > .deco-corner-2 {
+    bottom: -1px; right: -1px;
+    border-bottom: 1px solid #E8B14B;
+    border-right: 1px solid #E8B14B;
+  }
+
+  /* Asiento estilo butaca: redondeado arriba, recto abajo, sutil profundidad */
+  .seat-shape {
+    border-radius: 8px 8px 3px 3px;
+    transition: transform 150ms ease-out, box-shadow 200ms ease-out, background 200ms;
+    will-change: transform;
+  }
+
+  /* Ticket stub: bordes con perforaciones a izquierda y derecha */
+  .ticket-stub {
+    --notch: 14px;
+    mask-image:
+      radial-gradient(circle var(--notch) at 0 50%, transparent 98%, black 100%),
+      radial-gradient(circle var(--notch) at 100% 50%, transparent 98%, black 100%);
+    mask-composite: intersect;
+    -webkit-mask-composite: source-in;
+  }
+
+  /* Stamp deco (sello "PAGADO" / "USADO") */
+  .stamp {
+    border: 2px solid currentColor;
+    border-radius: 4px;
+    padding: 0.35rem 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    transform: rotate(-6deg);
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0); /* placeholder for inner ring */
+    position: relative;
+  }
+  .stamp::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    opacity: 0.5;
+  }
+
+  /* Gradiente "luz de escenario" desde arriba */
+  .stage-light {
+    background: radial-gradient(ellipse 70% 50% at 50% 0%,
+      rgba(232, 177, 75, 0.18) 0%,
+      rgba(232, 177, 75, 0.05) 30%,
+      transparent 60%);
+  }
+
+  /* Trazado guía de fondo deco */
+  .deco-bg {
+    background-image:
+      radial-gradient(ellipse 80% 40% at 50% -10%, rgba(232, 177, 75, 0.08), transparent 60%),
+      linear-gradient(180deg, #0A0A12 0%, #0A0A12 100%);
+  }
+
+  /* Texto con gradiente oro */
+  .text-gold-gradient {
+    background: linear-gradient(135deg, #F4CB6E 0%, #E8B14B 40%, #B88A2D 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Borde con gradiente sutil */
+  .border-gold-fade {
+    border-image: linear-gradient(180deg, rgba(232, 177, 75, 0.6), rgba(232, 177, 75, 0.05)) 1;
+  }
+
+  /* Animación de entrada escalonada para listas */
+  .stagger > * {
+    animation: fade-up 0.6s ease-out both;
+  }
+  .stagger > *:nth-child(1)  { animation-delay: 0.05s; }
+  .stagger > *:nth-child(2)  { animation-delay: 0.10s; }
+  .stagger > *:nth-child(3)  { animation-delay: 0.15s; }
+  .stagger > *:nth-child(4)  { animation-delay: 0.20s; }
+  .stagger > *:nth-child(5)  { animation-delay: 0.25s; }
+  .stagger > *:nth-child(6)  { animation-delay: 0.30s; }
+  .stagger > *:nth-child(7)  { animation-delay: 0.35s; }
+  .stagger > *:nth-child(8)  { animation-delay: 0.40s; }
+  .stagger > *:nth-child(n+9){ animation-delay: 0.45s; }
+}
