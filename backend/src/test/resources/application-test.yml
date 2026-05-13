@@ -1,0 +1,33 @@
+app:
+  qr:
+    signing-secret: dGVzdC1xci1zaWduaW5nLXNlY3JldC1ub3QtZm9yLXByb2R1Y3Rpb24=
+  cors:
+    allowed-origins: http://localhost:3000
+  jwt:
+    access-expiration-min: 15
+    refresh-expiration-days: 7
+    issuer: auditorio-tickets-test
+  bootstrap:
+    admin-email: ""
+    admin-password: ""
+  rate-limit:
+    public-requests-per-minute: 10000
+    auth-requests-per-minute: 10000
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: dummy-test-client-id
+            client-secret: dummy-test-client-secret
+
+  mail:
+    host: localhost
+    port: 25
+
+logging:
+  level:
+    org.testcontainers: INFO
+    com.zaxxer.hikari: WARN
