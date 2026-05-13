@@ -20,6 +20,7 @@ frontend/out/
 frontend/build/
 frontend/coverage/
 frontend/.turbo/
+frontend/*.tsbuildinfo
 
 # Logs
 *.log
