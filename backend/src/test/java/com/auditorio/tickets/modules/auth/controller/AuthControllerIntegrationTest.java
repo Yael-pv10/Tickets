@@ -82,14 +82,10 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /api/users/me sin Authorization no permite acceso")
-    void me_without_token_is_unauthorized() throws Exception {
-        // El SecurityConfig activa oauth2Login() sin un AuthenticationEntryPoint custom,
-        // por lo que requests no autenticadas a /api/** son redirigidas (302) a
-        // /oauth2/authorization/google en lugar de devolver 401.
-        // Para una API REST pura, lo correcto sería 401. Lo dejamos pendiente como mejora.
+    @DisplayName("GET /api/users/me sin Authorization devuelve 401")
+    void me_without_token_returns_401() throws Exception {
         mockMvc.perform(get("/api/users/me"))
-            .andExpect(status().is3xxRedirection());
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
