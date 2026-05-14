@@ -17,6 +17,33 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
 
     List<Ticket> findByUserIdOrderByIssuedAtDesc(UUID userId);
 
+    /** Boletos emitidos (PAID o USED) para un evento. Excluye CANCELLED / REFUNDED / RESERVED. */
+    @Query("""
+        SELECT COUNT(t) FROM Ticket t
+         WHERE t.eventSeat.event.id = :eventId
+           AND t.status IN (
+                com.auditorio.tickets.modules.ticket.model.TicketStatus.PAID,
+                com.auditorio.tickets.modules.ticket.model.TicketStatus.USED)
+        """)
+    long countIssuedByEvent(@Param("eventId") UUID eventId);
+
+    /** Boletos validados (USED) para un evento desde un instante dado (típicamente inicio del día). */
+    @Query("""
+        SELECT COUNT(t) FROM Ticket t
+         WHERE t.eventSeat.event.id = :eventId
+           AND t.status = com.auditorio.tickets.modules.ticket.model.TicketStatus.USED
+           AND t.usedAt >= :since
+        """)
+    long countValidatedByEventSince(@Param("eventId") UUID eventId, @Param("since") Instant since);
+
+    /** Boletos validados por un staff concreto desde un instante dado. */
+    @Query("""
+        SELECT COUNT(t) FROM Ticket t
+         WHERE t.usedByStaff.id = :staffId
+           AND t.usedAt >= :since
+        """)
+    long countValidatedByStaffSince(@Param("staffId") UUID staffId, @Param("since") Instant since);
+
     /**
      * UPDATE atómico: marca un ticket como USED solo si está PAID.
      * Devuelve filas afectadas. Si 0 → ya estaba usado, cancelado o no existe.

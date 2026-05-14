@@ -2,13 +2,21 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
 export function NavBar() {
   const { user, isAuthenticated, logout } = useAuth();
   const pathname = usePathname();
-  const isStaff = user?.role === 'STAFF' || user?.role === 'ADMIN';
-  const isAdmin = user?.role === 'ADMIN';
+  // Zustand persist rehidrata desde localStorage en el cliente; esperamos al mount
+  // para evitar mismatch SSR vs cliente (sin esto, el cliente añade links de auth
+  // que el servidor no renderizó y React aborta la hidratación).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const showAuth = mounted && isAuthenticated;
+  const isStaff = showAuth && (user?.role === 'STAFF' || user?.role === 'ADMIN');
+  const isAdmin = showAuth && user?.role === 'ADMIN';
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -48,14 +56,16 @@ export function NavBar() {
         {/* Links */}
         <div className="flex h-full items-center gap-7">
           <NavLink href="/events">Cartelera</NavLink>
-          {isAuthenticated && <NavLink href="/my-tickets">Mis boletos</NavLink>}
+          {showAuth && <NavLink href="/my-tickets">Mis boletos</NavLink>}
           {isStaff && <NavLink href="/scan">Validar</NavLink>}
           {isAdmin && <NavLink href="/dashboard">Admin</NavLink>}
         </div>
 
         {/* Auth action */}
         <div className="flex items-center gap-4">
-          {isAuthenticated ? (
+          {!mounted ? (
+            <div className="h-9 w-20" aria-hidden />
+          ) : showAuth ? (
             <>
               <div className="hidden flex-col items-end leading-none sm:flex">
                 <span className="font-mono text-[10px] uppercase tracking-wider2 text-cream-mute">

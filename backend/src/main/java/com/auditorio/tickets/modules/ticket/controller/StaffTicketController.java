@@ -1,7 +1,9 @@
 package com.auditorio.tickets.modules.ticket.controller;
 
+import com.auditorio.tickets.modules.ticket.dto.TodayDashboardDto;
 import com.auditorio.tickets.modules.ticket.dto.ValidateTicketRequest;
 import com.auditorio.tickets.modules.ticket.dto.ValidationResult;
+import com.auditorio.tickets.modules.ticket.service.StaffDashboardService;
 import com.auditorio.tickets.modules.ticket.service.TicketValidationService;
 import com.auditorio.tickets.security.CustomUserDetails;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -9,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,9 +24,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class StaffTicketController {
 
     private final TicketValidationService validationService;
+    private final StaffDashboardService staffDashboardService;
 
-    public StaffTicketController(TicketValidationService validationService) {
+    public StaffTicketController(TicketValidationService validationService,
+                                 StaffDashboardService staffDashboardService) {
         this.validationService = validationService;
+        this.staffDashboardService = staffDashboardService;
     }
 
     @PostMapping("/validate")
@@ -36,6 +42,11 @@ public class StaffTicketController {
                 clientIp(http),
                 userAgent(http)
         );
+    }
+
+    @GetMapping("/today")
+    public TodayDashboardDto today(@AuthenticationPrincipal CustomUserDetails principal) {
+        return staffDashboardService.getToday(principal.getDomainUser());
     }
 
     private String clientIp(HttpServletRequest req) {
