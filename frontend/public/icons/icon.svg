@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0A0A12"/>
+  <rect x="64" y="64" width="384" height="384" fill="none" stroke="#E8B14B" stroke-width="6"/>
+  <rect x="56" y="56" width="20" height="20" fill="none" stroke="#E8B14B" stroke-width="3"/>
+  <rect x="436" y="56" width="20" height="20" fill="none" stroke="#E8B14B" stroke-width="3"/>
+  <rect x="56" y="436" width="20" height="20" fill="none" stroke="#E8B14B" stroke-width="3"/>
+  <rect x="436" y="436" width="20" height="20" fill="none" stroke="#E8B14B" stroke-width="3"/>
+  <text x="256" y="356" font-family="Georgia, 'Times New Roman', serif" font-size="320" font-weight="500" fill="#E8B14B" text-anchor="middle">T</text>
+</svg>

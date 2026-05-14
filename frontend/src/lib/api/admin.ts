@@ -84,6 +84,7 @@ export const adminApi = {
     startsAt: string;
     endsAt?: string;
     defaultPriceCents: number;
+    sectionPrices?: Array<{ sectionId: string; priceCents: number }>;
   }): Promise<EventDto> {
     const { data } = await apiClient.post<EventDto>('/admin/events', input);
     return data;
@@ -105,7 +106,16 @@ export const adminApi = {
     const { data } = await apiClient.get<AdminUser[]>('/admin/users');
     return data;
   },
-  async updateUserRole(id: string, role: AdminUser['role']): Promise<AdminUser> {
+  async createTeamMember(input: {
+    email: string;
+    name: string;
+    password: string;
+    role: 'STAFF' | 'ADMIN';
+  }): Promise<AdminUser> {
+    const { data } = await apiClient.post<AdminUser>('/admin/users', input);
+    return data;
+  },
+  async updateUserRole(id: string, role: 'STAFF' | 'ADMIN'): Promise<AdminUser> {
     const { data } = await apiClient.put<AdminUser>(`/admin/users/${id}/role`, { role });
     return data;
   },

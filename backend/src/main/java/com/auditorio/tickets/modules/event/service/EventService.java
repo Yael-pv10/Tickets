@@ -5,12 +5,15 @@ import com.auditorio.tickets.common.exception.ResourceNotFoundException;
 import com.auditorio.tickets.modules.event.dto.CreateEventRequest;
 import com.auditorio.tickets.modules.event.dto.EventDto;
 import com.auditorio.tickets.modules.event.dto.EventSeatDto;
+import com.auditorio.tickets.modules.event.dto.SectionPrice;
 import com.auditorio.tickets.modules.event.dto.UpdateEventRequest;
 import com.auditorio.tickets.modules.event.model.Event;
 import com.auditorio.tickets.modules.event.model.EventStatus;
 import com.auditorio.tickets.modules.event.repository.EventRepository;
 import com.auditorio.tickets.modules.event.repository.EventSeatRepository;
+import com.auditorio.tickets.modules.venue.model.Section;
 import com.auditorio.tickets.modules.venue.model.Venue;
+import com.auditorio.tickets.modules.venue.repository.SectionRepository;
 import com.auditorio.tickets.modules.venue.repository.VenueRepository;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
@@ -20,6 +23,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -29,13 +37,16 @@ public class EventService {
     private final EventRepository eventRepository;
     private final EventSeatRepository eventSeatRepository;
     private final VenueRepository venueRepository;
+    private final SectionRepository sectionRepository;
 
     public EventService(EventRepository eventRepository,
                         EventSeatRepository eventSeatRepository,
-                        VenueRepository venueRepository) {
+                        VenueRepository venueRepository,
+                        SectionRepository sectionRepository) {
         this.eventRepository = eventRepository;
         this.eventSeatRepository = eventSeatRepository;
         this.venueRepository = venueRepository;
+        this.sectionRepository = sectionRepository;
     }
 
     // ---------- consultas públicas ----------
@@ -77,6 +88,14 @@ public class EventService {
         if (request.endsAt() != null && !request.endsAt().isAfter(request.startsAt())) {
             throw new BusinessException("endsAt debe ser posterior a startsAt");
         }
+
+        List<Section> sections = sectionRepository.findByVenueId(venue.getId());
+        if (sections.isEmpty()) {
+            throw new BusinessException("El venue no tiene secciones definidas");
+        }
+        Map<UUID, Integer> priceBySectionId = resolveSectionPrices(
+                request.sectionPrices(), request.defaultPriceCents(), sections);
+
         Event event = Event.builder()
                 .venue(venue)
                 .title(request.title().trim())
@@ -88,11 +107,45 @@ public class EventService {
         eventRepository.save(event);
         eventRepository.flush();
 
-        int seeded = eventSeatRepository.seedFromVenue(event.getId(), venue.getId(), request.defaultPriceCents());
-        if (seeded == 0) {
+        int seededTotal = 0;
+        for (Section section : sections) {
+            int price = priceBySectionId.get(section.getId());
+            seededTotal += eventSeatRepository.seedFromSection(event.getId(), section.getId(), price);
+        }
+        if (seededTotal == 0) {
             throw new BusinessException("El venue no tiene asientos definidos");
         }
         return EventDto.fromEntity(event);
+    }
+
+    /**
+     * Construye el mapa sectionId → priceCents combinando overrides explícitos y default.
+     * Valida que cada sección referenciada exista en el venue y que no haya duplicados.
+     */
+    private Map<UUID, Integer> resolveSectionPrices(List<SectionPrice> overrides,
+                                                    int defaultPriceCents,
+                                                    List<Section> venueSections) {
+        Map<UUID, Integer> resolved = new HashMap<>();
+        for (Section s : venueSections) {
+            resolved.put(s.getId(), defaultPriceCents);
+        }
+        if (overrides == null || overrides.isEmpty()) {
+            return resolved;
+        }
+        Set<UUID> validSectionIds = resolved.keySet();
+        Set<UUID> seen = new HashSet<>();
+        for (SectionPrice override : overrides) {
+            if (!seen.add(override.sectionId())) {
+                throw new BusinessException(
+                        "Precio duplicado para la sección " + override.sectionId());
+            }
+            if (!validSectionIds.contains(override.sectionId())) {
+                throw new BusinessException(
+                        "La sección " + override.sectionId() + " no pertenece al venue");
+            }
+            resolved.put(override.sectionId(), override.priceCents());
+        }
+        return resolved;
     }
 
     @Transactional

@@ -5,18 +5,16 @@ const ADMIN_PREFIX = '/dashboard';
 const STAFF_PREFIX = '/scan';
 const CLIENT_PREFIX = '/my-tickets';
 
-// La validación de rol real se hace en el backend en cada petición.
-// El middleware solo previene navegación a rutas protegidas sin haber pasado por login.
-// El refresh token vive en cookie HttpOnly bajo /api/auth y no es accesible aquí;
-// usamos un marcador "auth-present" que el cliente coloca tras login exitoso.
+// La autorización real ocurre en el backend por cada petición.
+// Aquí solo evitamos navegación inútil: si el usuario no tiene el rol esperado,
+// redirigimos a una ruta donde sí puede estar, sin esperar al 403 del API.
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isProtected =
-    pathname.startsWith(ADMIN_PREFIX) ||
-    pathname.startsWith(STAFF_PREFIX) ||
-    pathname.startsWith(CLIENT_PREFIX);
+  const requiresAdmin = pathname.startsWith(ADMIN_PREFIX);
+  const requiresStaffOrAdmin = pathname.startsWith(STAFF_PREFIX);
+  const requiresAuth = requiresAdmin || requiresStaffOrAdmin || pathname.startsWith(CLIENT_PREFIX);
 
-  if (!isProtected) return NextResponse.next();
+  if (!requiresAuth) return NextResponse.next();
 
   const marker = request.cookies.get('auth-present');
   if (!marker) {
@@ -25,6 +23,22 @@ export function middleware(request: NextRequest) {
     url.searchParams.set('redirect', pathname);
     return NextResponse.redirect(url);
   }
+
+  const role = request.cookies.get('auth-role')?.value;
+
+  if (requiresAdmin && role !== 'ADMIN') {
+    const url = request.nextUrl.clone();
+    // STAFF tiene su propia área. Cualquier otra cosa al home.
+    url.pathname = role === 'STAFF' ? '/scan' : '/';
+    return NextResponse.redirect(url);
+  }
+
+  if (requiresStaffOrAdmin && role !== 'STAFF' && role !== 'ADMIN') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/';
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
 }
 

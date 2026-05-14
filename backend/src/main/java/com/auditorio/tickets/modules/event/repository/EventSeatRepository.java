@@ -37,6 +37,22 @@ public interface EventSeatRepository extends JpaRepository<EventSeat, UUID> {
                       @Param("venueId") UUID venueId,
                       @Param("defaultPriceCents") int defaultPriceCents);
 
+    /**
+     * Crea un EventSeat por cada Seat de una sección concreta, con su propio precio.
+     * Usado cuando el evento define precios diferenciados por sección.
+     */
+    @Modifying
+    @Query(value = """
+            INSERT INTO event_seats (id, event_id, seat_id, price_cents, status, version, created_at, updated_at)
+            SELECT gen_random_uuid(), :eventId, s.id, :priceCents, 'AVAILABLE', 0, NOW(), NOW()
+            FROM seats s
+            WHERE s.section_id = :sectionId
+            ON CONFLICT (event_id, seat_id) DO NOTHING
+            """, nativeQuery = true)
+    int seedFromSection(@Param("eventId") UUID eventId,
+                        @Param("sectionId") UUID sectionId,
+                        @Param("priceCents") int priceCents);
+
     List<EventSeat> findByReservationId(UUID reservationId);
 
     /** Libera los asientos de una reserva (cancelación explícita). */

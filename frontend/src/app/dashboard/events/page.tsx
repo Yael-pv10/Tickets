@@ -72,9 +72,28 @@ function NewEventForm({ venues, onCreated }: { venues: VenueDto[]; onCreated: ()
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startsAt, setStartsAt] = useState('');
-  const [price, setPrice] = useState(50000);
+  const [defaultPrice, setDefaultPrice] = useState(50000);
+  // sectionId -> override price (en centavos). Si no existe key, hereda defaultPrice.
+  const [sectionOverrides, setSectionOverrides] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedVenue = venues.find((v) => v.id === venueId);
+
+  // Al cambiar de venue, limpiamos overrides para no arrastrar secciones de otro venue.
+  useEffect(() => {
+    setSectionOverrides({});
+  }, [venueId]);
+
+  function setSectionPrice(sectionId: string, value: string) {
+    if (value === '') {
+      setSectionOverrides(({ [sectionId]: _omit, ...rest }) => rest);
+      return;
+    }
+    const num = parseInt(value, 10);
+    if (Number.isNaN(num) || num < 0) return;
+    setSectionOverrides((prev) => ({ ...prev, [sectionId]: num }));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,16 +102,22 @@ function NewEventForm({ venues, onCreated }: { venues: VenueDto[]; onCreated: ()
     setError(null);
     try {
       const isoStart = new Date(startsAt).toISOString();
+      const sectionPrices = Object.entries(sectionOverrides).map(([sectionId, priceCents]) => ({
+        sectionId,
+        priceCents,
+      }));
       await adminApi.createEvent({
         venueId,
         title,
         description,
         startsAt: isoStart,
-        defaultPriceCents: price,
+        defaultPriceCents: defaultPrice,
+        sectionPrices: sectionPrices.length > 0 ? sectionPrices : undefined,
       });
       setTitle('');
       setDescription('');
       setStartsAt('');
+      setSectionOverrides({});
       onCreated();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
@@ -132,11 +157,11 @@ function NewEventForm({ venues, onCreated }: { venues: VenueDto[]; onCreated: ()
           required
         />
         <Input
-          label="Precio por butaca (centavos)"
+          label="Precio base (centavos)"
           type="number"
           min={0}
-          value={price}
-          onChange={(e) => setPrice(parseInt(e.target.value || '0', 10))}
+          value={defaultPrice}
+          onChange={(e) => setDefaultPrice(parseInt(e.target.value || '0', 10))}
           required
         />
         <div className="sm:col-span-2">
@@ -147,6 +172,49 @@ function NewEventForm({ venues, onCreated }: { venues: VenueDto[]; onCreated: ()
             placeholder="Una noche memorable…"
           />
         </div>
+
+        {selectedVenue && selectedVenue.sections.length > 0 && (
+          <div className="sm:col-span-2">
+            <div className="flex items-baseline justify-between border-b border-ink-300/50 pb-2">
+              <span className="eyebrow">Precio por sección</span>
+              <span className="font-mono text-[10px] uppercase tracking-wider2 text-cream-mute">
+                Vacío = usa el precio base
+              </span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {selectedVenue.sections.map((section) => {
+                const inputId = `section-price-${section.id}`;
+                const value = sectionOverrides[section.id];
+                return (
+                  <div
+                    key={section.id}
+                    className="flex items-center justify-between gap-3 border border-ink-300/50 bg-ink/40 px-4 py-3"
+                  >
+                    <label htmlFor={inputId} className="min-w-0 flex-1">
+                      <p className="font-display text-lg font-medium leading-tight text-cream">
+                        {section.name}
+                      </p>
+                      <p className="font-mono text-[10px] uppercase tracking-wider2 text-cream-mute">
+                        {section.seatCount} {section.seatCount === 1 ? 'butaca' : 'butacas'}
+                      </p>
+                    </label>
+                    <input
+                      id={inputId}
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      placeholder={String(defaultPrice)}
+                      value={value === undefined ? '' : String(value)}
+                      onChange={(e) => setSectionPrice(section.id, e.target.value)}
+                      className="w-32 border border-ink-300/60 bg-ink-100 px-3 py-2 text-right font-mono text-sm tabular-nums text-cream placeholder:text-cream-mute focus:border-gold focus:outline-none"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="sm:col-span-2 flex justify-end">
           <Button type="submit" loading={submitting}>Crear función</Button>
         </div>

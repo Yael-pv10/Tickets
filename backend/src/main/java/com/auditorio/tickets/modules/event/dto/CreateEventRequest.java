@@ -1,5 +1,6 @@
 package com.auditorio.tickets.modules.event.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record CreateEventRequest(
@@ -15,5 +17,6 @@ public record CreateEventRequest(
         @Size(max = 5000) String description,
         @NotNull @Future Instant startsAt,
         Instant endsAt,
-        @Min(0) int defaultPriceCents
+        @Min(0) int defaultPriceCents,
+        @Valid List<SectionPrice> sectionPrices
 ) {}
