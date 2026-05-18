@@ -4,15 +4,22 @@ import com.auditorio.tickets.common.exception.BusinessException;
 import com.auditorio.tickets.common.exception.ResourceNotFoundException;
 import com.auditorio.tickets.modules.event.repository.EventSeatRepository;
 import com.auditorio.tickets.modules.venue.dto.*;
+import com.auditorio.tickets.modules.venue.model.Point;
 import com.auditorio.tickets.modules.venue.model.Seat;
 import com.auditorio.tickets.modules.venue.model.Section;
+import com.auditorio.tickets.modules.venue.model.SectionType;
 import com.auditorio.tickets.modules.venue.model.Venue;
+import com.auditorio.tickets.modules.venue.model.VenueBackground;
 import com.auditorio.tickets.modules.venue.repository.SeatRepository;
 import com.auditorio.tickets.modules.venue.repository.SectionRepository;
+import com.auditorio.tickets.modules.venue.repository.VenueBackgroundRepository;
 import com.auditorio.tickets.modules.venue.repository.VenueRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -32,19 +39,26 @@ public class VenueService {
     /** Separación entre asientos en la cuadrícula de disposición por defecto. */
     private static final int SEAT_SPACING = 100;
 
+    private static final long MAX_BG_BYTES = 8L * 1024 * 1024;
+    private static final Set<String> ALLOWED_BG_MIME =
+            Set.of("image/png", "image/jpeg", "image/webp");
+
     private final VenueRepository venueRepository;
     private final SectionRepository sectionRepository;
     private final SeatRepository seatRepository;
     private final EventSeatRepository eventSeatRepository;
+    private final VenueBackgroundRepository venueBackgroundRepository;
 
     public VenueService(VenueRepository venueRepository,
                         SectionRepository sectionRepository,
                         SeatRepository seatRepository,
-                        EventSeatRepository eventSeatRepository) {
+                        EventSeatRepository eventSeatRepository,
+                        VenueBackgroundRepository venueBackgroundRepository) {
         this.venueRepository = venueRepository;
         this.sectionRepository = sectionRepository;
         this.seatRepository = seatRepository;
         this.eventSeatRepository = eventSeatRepository;
+        this.venueBackgroundRepository = venueBackgroundRepository;
     }
 
     public List<VenueDto> listAll() {
@@ -81,6 +95,19 @@ public class VenueService {
         return VenueDto.fromEntity(venue, sectionsOf(venue.getId()));
     }
 
+    /** Configura el lienzo del auditorio y el polígono del escenario. */
+    @Transactional
+    public VenueDto updateVenueCanvas(UUID venueId, UpdateVenueCanvasRequest request) {
+        Venue venue = venueRepository.findById(venueId)
+                .orElseThrow(() -> new ResourceNotFoundException("Venue no encontrado"));
+        validatePolygon(request.stageShape());
+        venue.setCanvasWidth(request.canvasWidth());
+        venue.setCanvasHeight(request.canvasHeight());
+        venue.setStageShape(request.stageShape());
+        venueRepository.save(venue);
+        return VenueDto.fromEntity(venue, sectionsOf(venue.getId()));
+    }
+
     @Transactional
     public void delete(UUID id) {
         if (!venueRepository.existsById(id)) {
@@ -88,6 +115,51 @@ public class VenueService {
         }
         // CascadeType.ALL + ON DELETE CASCADE en BD eliminan sections y seats.
         venueRepository.deleteById(id);
+    }
+
+    // ---------- imagen de fondo (plano) ----------
+
+    @Transactional
+    public void setBackground(UUID venueId, MultipartFile file) {
+        if (!venueRepository.existsById(venueId)) {
+            throw new ResourceNotFoundException("Venue no encontrado");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("No se recibió ninguna imagen");
+        }
+        String mime = file.getContentType();
+        if (mime == null || !ALLOWED_BG_MIME.contains(mime)) {
+            throw new BusinessException("Formato no admitido. Usa PNG, JPEG o WebP");
+        }
+        if (file.getSize() > MAX_BG_BYTES) {
+            throw new BusinessException("La imagen supera el tamaño máximo (8 MB)");
+        }
+        byte[] data;
+        try {
+            data = file.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException("No se pudo leer la imagen");
+        }
+        VenueBackground bg = venueBackgroundRepository.findById(venueId)
+                .orElseGet(() -> {
+                    VenueBackground b = new VenueBackground();
+                    b.setVenueId(venueId);
+                    return b;
+                });
+        bg.setImage(data);
+        bg.setMime(mime);
+        bg.setUpdatedAt(Instant.now());
+        venueBackgroundRepository.save(bg);
+    }
+
+    @Transactional
+    public void deleteBackground(UUID venueId) {
+        venueBackgroundRepository.deleteById(venueId);
+    }
+
+    public VenueBackground getBackground(UUID venueId) {
+        return venueBackgroundRepository.findById(venueId)
+                .orElseThrow(() -> new ResourceNotFoundException("El auditorio no tiene plano"));
     }
 
     // ---------- sections ----------
@@ -103,6 +175,30 @@ public class VenueService {
         Section section = Section.builder().venue(venue).name(name).build();
         sectionRepository.save(section);
         return SectionDto.fromEntity(section, 0);
+    }
+
+    /** Actualiza el tipo, la forma (polígono) y el cupo de una sección. */
+    @Transactional
+    public SectionDto updateSectionShape(UUID sectionId, UpdateSectionShapeRequest request) {
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sección no encontrada"));
+        SectionType type;
+        try {
+            type = SectionType.valueOf(request.type());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("Tipo de sección inválido");
+        }
+        validatePolygon(request.shape());
+        if (type == SectionType.GENERAL_ADMISSION
+                && (request.capacity() == null || request.capacity() <= 0)) {
+            throw new BusinessException("Una sección de admisión general requiere un cupo válido");
+        }
+        section.setType(type);
+        section.setShape(request.shape());
+        // El cupo solo tiene sentido en admisión general.
+        section.setCapacity(type == SectionType.GENERAL_ADMISSION ? request.capacity() : null);
+        sectionRepository.save(section);
+        return SectionDto.fromEntity(section, seatRepository.countBySectionId(sectionId));
     }
 
     @Transactional
@@ -198,7 +294,97 @@ public class VenueService {
         }
     }
 
+    /**
+     * Rellena una sección con una cuadrícula de asientos por interpolación
+     * bilineal dentro de las 4 esquinas dadas. Reemplaza los asientos previos.
+     */
+    @Transactional
+    public List<SeatDto> fillSection(UUID sectionId, FillSectionRequest request) {
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sección no encontrada"));
+
+        int total = request.rows() * request.seatsPerRow();
+        if (total > MAX_BULK_SEATS) {
+            throw new BusinessException("Demasiados asientos (máx. " + MAX_BULK_SEATS + ")");
+        }
+        validatePolygon(request.corners());
+        if (eventSeatRepository.existsBySeat_Section_Id(sectionId)) {
+            throw new BusinessException(
+                    "No se puede regenerar la sección: ya tiene asientos asignados a un evento.");
+        }
+
+        // Reemplaza la cuadrícula previa.
+        seatRepository.deleteBySectionId(sectionId);
+
+        List<Point> c = request.corners();
+        Point frontLeft = c.get(0), frontRight = c.get(1), backRight = c.get(2), backLeft = c.get(3);
+
+        List<Seat> toCreate = new ArrayList<>(total);
+        for (int r = 0; r < request.rows(); r++) {
+            double v = request.rows() == 1 ? 0 : (double) r / (request.rows() - 1);
+            String row = rowLabel(r);
+            for (int col = 0; col < request.seatsPerRow(); col++) {
+                double u = request.seatsPerRow() == 1 ? 0 : (double) col / (request.seatsPerRow() - 1);
+                Point front = lerp(frontLeft, frontRight, u);
+                Point back = lerp(backLeft, backRight, u);
+                Point pos = lerp(front, back, v);
+                toCreate.add(Seat.builder()
+                        .section(section)
+                        .rowLabel(row)
+                        .seatNumber(col + 1)
+                        .posX(pos.x())
+                        .posY(pos.y())
+                        .build());
+            }
+        }
+
+        // La forma de la sección es el cuadrilátero de las 4 esquinas.
+        section.setType(SectionType.SEATED);
+        section.setShape(request.corners());
+        section.setCapacity(null);
+        sectionRepository.save(section);
+
+        seatRepository.saveAll(toCreate);
+        seatRepository.flush();
+        return seatRepository.findBySectionId(sectionId).stream()
+                .map(SeatDto::fromEntity)
+                .toList();
+    }
+
     // ---------- helpers ----------
+
+    /** Interpolación lineal entre dos puntos (t en [0,1]). */
+    private static Point lerp(Point a, Point b, double t) {
+        return new Point(
+                (int) Math.round(a.x() + (b.x() - a.x()) * t),
+                (int) Math.round(a.y() + (b.y() - a.y()) * t));
+    }
+
+    /** Etiqueta de fila estilo hoja de cálculo: 0→A, 25→Z, 26→AA. */
+    private static String rowLabel(int index) {
+        StringBuilder sb = new StringBuilder();
+        int n = index;
+        do {
+            sb.insert(0, (char) ('A' + n % 26));
+            n = n / 26 - 1;
+        } while (n >= 0);
+        return sb.toString();
+    }
+
+    /** Valida un polígono opcional: si viene, ha de tener 3+ puntos en rango. */
+    private void validatePolygon(List<Point> polygon) {
+        if (polygon == null || polygon.isEmpty()) {
+            return;
+        }
+        if (polygon.size() < 3) {
+            throw new BusinessException("Un polígono necesita al menos 3 puntos");
+        }
+        for (Point p : polygon) {
+            if (p.x() < 0 || p.y() < 0 || p.x() > 100_000 || p.y() > 100_000) {
+                throw new BusinessException("Coordenadas del polígono fuera de rango");
+            }
+        }
+    }
 
     /**
      * Asigna un índice de orden a cada fila de la sección (existentes + nuevas),

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { eventsApi, type EventDto, type EventSeatDto } from '@/lib/api/events';
+import { venuesApi, type Venue, type Point } from '@/lib/api/venues';
 import { reservationsApi } from '@/lib/api/reservations';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -51,6 +52,10 @@ export default function EventDetailPage() {
 
   const [event, setEvent] = useState<EventDto | null>(null);
   const [seats, setSeats] = useState<EventSeatDto[] | null>(null);
+  const [venue, setVenue] = useState<Venue | null>(null);
+  const [venueResolved, setVenueResolved] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [mapNote, setMapNote] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -61,6 +66,11 @@ export default function EventDetailPage() {
       .then(([e, s]) => {
         setEvent(e);
         setSeats(s);
+        venuesApi
+          .get(e.venueId)
+          .then(setVenue)
+          .catch(() => setVenue(null))
+          .finally(() => setVenueResolved(true));
       })
       .catch(() => setError('No se pudo cargar el evento'));
   }, [params.id]);
@@ -121,7 +131,7 @@ export default function EventDetailPage() {
       </main>
     );
   }
-  if (!event || !seats) {
+  if (!event || !seats || !venueResolved) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-24">
         <p className="text-cream-mute font-mono text-sm">Cargando función…</p>
@@ -130,6 +140,10 @@ export default function EventDetailPage() {
   }
 
   const selectedSeats = seats.filter((s) => selected.has(s.id));
+  const hasMap = !!venue && venue.sections.some((s) => s.shape && s.shape.length >= 3);
+  const activeSectionSeats = activeSection
+    ? seats.filter((s) => s.sectionName === activeSection)
+    : [];
 
   return (
     <main className="relative pb-40">
@@ -165,54 +179,105 @@ export default function EventDetailPage() {
             <div>
               <span className="eyebrow">Sala</span>
               <h2 className="mt-2 font-display text-3xl font-medium text-cream sm:text-4xl">
-                Selecciona tus butacas
+                {hasMap && !activeSection ? 'Elige tu sección' : 'Selecciona tus butacas'}
               </h2>
             </div>
-            <div className="hidden flex-wrap items-center gap-4 sm:flex">
-              <LegendDot color="bg-ink-100 border-sage/30" label="Disponible" />
-              <LegendDot color="bg-gold border-gold" label="Tuyo" />
-              <LegendDot color="bg-ember/10 border-ember/30" label="Reservado" />
-              <LegendDot color="bg-ink-200 border-ink-300" label="Vendido" />
-            </div>
+            {(!hasMap || activeSection) && (
+              <div className="hidden flex-wrap items-center gap-4 sm:flex">
+                <LegendDot color="bg-ink-100 border-sage/30" label="Disponible" />
+                <LegendDot color="bg-gold border-gold" label="Tuyo" />
+                <LegendDot color="bg-ember/10 border-ember/30" label="Reservado" />
+                <LegendDot color="bg-ink-200 border-ink-300" label="Vendido" />
+              </div>
+            )}
           </div>
 
-          {/* Escenario */}
-          <div className="mt-12">
-            <div className="relative mx-auto max-w-3xl">
-              <div className="absolute inset-x-0 -top-24 h-24 stage-light" />
-              <div className="relative flex flex-col items-center">
-                <div className="h-1 w-full max-w-md rounded-full bg-gradient-to-r from-transparent via-gold/80 to-transparent animate-shimmer" />
-                <div className="mt-2 h-px w-full max-w-2xl bg-gradient-to-r from-transparent via-gold/30 to-transparent" />
-                <p className="mt-4 font-mono text-[10px] uppercase tracking-marquee text-gold">
-                  · Escenario ·
+          {hasMap && !activeSection && (
+            <div className="mt-10">
+              <p className="mb-4 font-mono text-[11px] uppercase tracking-marquee text-cream-mute">
+                Toca una sección para ver sus butacas
+              </p>
+              <VenueOverview
+                venue={venue!}
+                seats={seats}
+                onPickSeated={(name) => {
+                  setActiveSection(name);
+                  setMapNote(null);
+                }}
+                onPickGa={(name) =>
+                  setMapNote(`«${name}» es admisión general · venta en taquilla`)
+                }
+              />
+              {mapNote && (
+                <p className="mt-4 text-center font-mono text-xs uppercase tracking-marquee text-gold">
+                  {mapNote}
                 </p>
+              )}
+            </div>
+          )}
+
+          {hasMap && activeSection && (
+            <div className="mt-10">
+              <button
+                onClick={() => setActiveSection(null)}
+                className="font-mono text-[11px] uppercase tracking-marquee text-gold hover:text-gold-glow"
+              >
+                ← Volver al mapa
+              </button>
+              <h3 className="mt-4 font-display text-2xl font-medium tracking-tight text-cream">
+                {activeSection}
+              </h3>
+              <div className="mt-6">
+                <SectionMap
+                  seats={activeSectionSeats}
+                  selected={selected}
+                  onToggle={toggleSeat}
+                />
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Secciones */}
-          <div className="mt-16 space-y-12">
-            {sectionNames.map((section, sIdx) => {
-              const sectionSeats = seats.filter((s) => s.sectionName === section);
-              return (
-                <section key={section}>
-                  <div className="mb-5 flex items-center gap-4">
-                    <span className="font-mono text-xs tracking-wider2 text-gold">
-                      {String(sIdx + 1).padStart(2, '0')}
-                    </span>
-                    <h3 className="font-display text-lg font-medium tracking-tight text-cream">
-                      {section}
-                    </h3>
-                    <span className="flex-1 deco-rule" />
-                    <span className="font-mono text-[10px] uppercase tracking-wider2 text-cream-mute">
-                      {sectionSeats.length} butacas
-                    </span>
+          {!hasMap && (
+            <>
+              {/* Escenario */}
+              <div className="mt-12">
+                <div className="relative mx-auto max-w-3xl">
+                  <div className="absolute inset-x-0 -top-24 h-24 stage-light" />
+                  <div className="relative flex flex-col items-center">
+                    <div className="h-1 w-full max-w-md rounded-full bg-gradient-to-r from-transparent via-gold/80 to-transparent animate-shimmer" />
+                    <div className="mt-2 h-px w-full max-w-2xl bg-gradient-to-r from-transparent via-gold/30 to-transparent" />
+                    <p className="mt-4 font-mono text-[10px] uppercase tracking-marquee text-gold">
+                      · Escenario ·
+                    </p>
                   </div>
-                  <SectionMap seats={sectionSeats} selected={selected} onToggle={toggleSeat} />
-                </section>
-              );
-            })}
-          </div>
+                </div>
+              </div>
+
+              {/* Secciones */}
+              <div className="mt-16 space-y-12">
+                {sectionNames.map((section, sIdx) => {
+                  const sectionSeats = seats.filter((s) => s.sectionName === section);
+                  return (
+                    <section key={section}>
+                      <div className="mb-5 flex items-center gap-4">
+                        <span className="font-mono text-xs tracking-wider2 text-gold">
+                          {String(sIdx + 1).padStart(2, '0')}
+                        </span>
+                        <h3 className="font-display text-lg font-medium tracking-tight text-cream">
+                          {section}
+                        </h3>
+                        <span className="flex-1 deco-rule" />
+                        <span className="font-mono text-[10px] uppercase tracking-wider2 text-cream-mute">
+                          {sectionSeats.length} butacas
+                        </span>
+                      </div>
+                      <SectionMap seats={sectionSeats} selected={selected} onToggle={toggleSeat} />
+                    </section>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </section>
       </div>
 
@@ -334,6 +399,123 @@ function SectionMap({
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function polyPoints(p: Point[]) {
+  return p.map((q) => `${q.x},${q.y}`).join(' ');
+}
+function polyCentroid(p: Point[]): { x: number; y: number } {
+  return {
+    x: p.reduce((a, q) => a + q.x, 0) / p.length,
+    y: p.reduce((a, q) => a + q.y, 0) / p.length,
+  };
+}
+
+/**
+ * Vista general del auditorio: dibuja las secciones como polígonos sobre
+ * el plano. Las secciones con asientos son clicables y se colorean por
+ * disponibilidad; las de admisión general se muestran como informativas.
+ */
+function VenueOverview({
+  venue,
+  seats,
+  onPickSeated,
+  onPickGa,
+}: {
+  venue: Venue;
+  seats: EventSeatDto[];
+  onPickSeated: (sectionName: string) => void;
+  onPickGa: (sectionName: string) => void;
+}) {
+  const [hasBg, setHasBg] = useState(false);
+  const bgUrl = venuesApi.backgroundUrl(venue.id);
+  const w = venue.canvasWidth;
+  const h = venue.canvasHeight;
+  const u = w / 320;
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setHasBg(true);
+    img.onerror = () => setHasBg(false);
+    img.src = bgUrl;
+  }, [bgUrl]);
+
+  return (
+    <div className="border border-ink-300 bg-ink-100">
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', aspectRatio: `${w} / ${h}` }}>
+        {hasBg ? (
+          <image href={bgUrl} x={0} y={0} width={w} height={h} />
+        ) : (
+          <rect x={0} y={0} width={w} height={h} fill="#16140f" />
+        )}
+
+        {venue.stageShape && venue.stageShape.length >= 3 && (
+          <g>
+            <polygon
+              points={polyPoints(venue.stageShape)}
+              fill="#3a3631"
+              stroke="#c9a24b"
+              strokeWidth={u}
+            />
+            <text
+              x={polyCentroid(venue.stageShape).x}
+              y={polyCentroid(venue.stageShape).y}
+              fill="#f3efe3"
+              fontSize={u * 6}
+              textAnchor="middle"
+              dominantBaseline="middle"
+            >
+              ESCENARIO
+            </text>
+          </g>
+        )}
+
+        {venue.sections.map((s) => {
+          if (!s.shape || s.shape.length < 3) return null;
+          const c = polyCentroid(s.shape);
+          const ga = s.type === 'GENERAL_ADMISSION';
+          const soldOut =
+            !ga && !seats.some((x) => x.sectionName === s.name && x.status === 'AVAILABLE');
+          const fill = ga ? '#c9a24b' : soldOut ? '#2a2722' : '#5b8a72';
+          return (
+            <g
+              key={s.id}
+              onClick={() => (ga ? onPickGa(s.name) : onPickSeated(s.name))}
+              className="cursor-pointer transition hover:opacity-80"
+            >
+              <polygon
+                points={polyPoints(s.shape)}
+                fill={fill}
+                fillOpacity={ga ? 0.28 : soldOut ? 0.55 : 0.32}
+                stroke={ga ? '#c9a24b' : soldOut ? '#4a4640' : '#5b8a72'}
+                strokeWidth={u}
+              />
+              <text
+                x={c.x}
+                y={c.y - u * 2}
+                fill="#f3efe3"
+                fontSize={u * 6}
+                textAnchor="middle"
+                dominantBaseline="middle"
+              >
+                {s.name}
+              </text>
+              <text
+                x={c.x}
+                y={c.y + u * 6}
+                fill={ga ? '#c9a24b' : soldOut ? '#8c8676' : '#9db8a8'}
+                fontSize={u * 4}
+                textAnchor="middle"
+                dominantBaseline="middle"
+              >
+                {ga ? 'taquilla' : soldOut ? 'agotada' : 'disponible'}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

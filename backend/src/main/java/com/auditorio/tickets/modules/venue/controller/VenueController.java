@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -44,10 +45,31 @@ public class VenueController {
         return venueService.update(id, request);
     }
 
+    @PutMapping("/{id}/canvas")
+    public VenueDto updateCanvas(@PathVariable UUID id,
+                                 @Valid @RequestBody UpdateVenueCanvasRequest request) {
+        return venueService.updateVenueCanvas(id, request);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
         venueService.delete(id);
+    }
+
+    // ---------- imagen de fondo (plano) ----------
+
+    @PutMapping("/{id}/background")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void uploadBackground(@PathVariable UUID id,
+                                 @RequestParam("file") MultipartFile file) {
+        venueService.setBackground(id, file);
+    }
+
+    @DeleteMapping("/{id}/background")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteBackground(@PathVariable UUID id) {
+        venueService.deleteBackground(id);
     }
 
     // ---------- sections ----------
@@ -57,6 +79,12 @@ public class VenueController {
     public SectionDto createSection(@PathVariable UUID venueId,
                                     @Valid @RequestBody CreateSectionRequest request) {
         return venueService.createSection(venueId, request);
+    }
+
+    @PutMapping("/sections/{sectionId}/shape")
+    public SectionDto updateSectionShape(@PathVariable UUID sectionId,
+                                         @Valid @RequestBody UpdateSectionShapeRequest request) {
+        return venueService.updateSectionShape(sectionId, request);
     }
 
     @DeleteMapping("/sections/{sectionId}")
@@ -81,5 +109,11 @@ public class VenueController {
     public List<SeatDto> updateLayout(@PathVariable UUID sectionId,
                                       @Valid @RequestBody UpdateSeatLayoutRequest request) {
         return venueService.updateSectionLayout(sectionId, request);
+    }
+
+    @PostMapping("/sections/{sectionId}/seats/fill")
+    public List<SeatDto> fillSection(@PathVariable UUID sectionId,
+                                     @Valid @RequestBody FillSectionRequest request) {
+        return venueService.fillSection(sectionId, request);
     }
 }
