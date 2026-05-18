@@ -110,4 +110,10 @@ public class VenueController {
                                       @Valid @RequestBody UpdateSeatLayoutRequest request) {
         return venueService.updateSectionLayout(sectionId, request);
     }
+
+    @PostMapping("/sections/{sectionId}/seats/fill")
+    public List<SeatDto> fillSection(@PathVariable UUID sectionId,
+                                     @Valid @RequestBody FillSectionRequest request) {
+        return venueService.fillSection(sectionId, request);
+    }
 }

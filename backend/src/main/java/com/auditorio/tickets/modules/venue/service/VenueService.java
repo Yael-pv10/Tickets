@@ -294,7 +294,82 @@ public class VenueService {
         }
     }
 
+    /**
+     * Rellena una sección con una cuadrícula de asientos por interpolación
+     * bilineal dentro de las 4 esquinas dadas. Reemplaza los asientos previos.
+     */
+    @Transactional
+    public List<SeatDto> fillSection(UUID sectionId, FillSectionRequest request) {
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sección no encontrada"));
+
+        int total = request.rows() * request.seatsPerRow();
+        if (total > MAX_BULK_SEATS) {
+            throw new BusinessException("Demasiados asientos (máx. " + MAX_BULK_SEATS + ")");
+        }
+        validatePolygon(request.corners());
+        if (eventSeatRepository.existsBySeat_Section_Id(sectionId)) {
+            throw new BusinessException(
+                    "No se puede regenerar la sección: ya tiene asientos asignados a un evento.");
+        }
+
+        // Reemplaza la cuadrícula previa.
+        seatRepository.deleteBySectionId(sectionId);
+
+        List<Point> c = request.corners();
+        Point frontLeft = c.get(0), frontRight = c.get(1), backRight = c.get(2), backLeft = c.get(3);
+
+        List<Seat> toCreate = new ArrayList<>(total);
+        for (int r = 0; r < request.rows(); r++) {
+            double v = request.rows() == 1 ? 0 : (double) r / (request.rows() - 1);
+            String row = rowLabel(r);
+            for (int col = 0; col < request.seatsPerRow(); col++) {
+                double u = request.seatsPerRow() == 1 ? 0 : (double) col / (request.seatsPerRow() - 1);
+                Point front = lerp(frontLeft, frontRight, u);
+                Point back = lerp(backLeft, backRight, u);
+                Point pos = lerp(front, back, v);
+                toCreate.add(Seat.builder()
+                        .section(section)
+                        .rowLabel(row)
+                        .seatNumber(col + 1)
+                        .posX(pos.x())
+                        .posY(pos.y())
+                        .build());
+            }
+        }
+
+        // La forma de la sección es el cuadrilátero de las 4 esquinas.
+        section.setType(SectionType.SEATED);
+        section.setShape(request.corners());
+        section.setCapacity(null);
+        sectionRepository.save(section);
+
+        seatRepository.saveAll(toCreate);
+        seatRepository.flush();
+        return seatRepository.findBySectionId(sectionId).stream()
+                .map(SeatDto::fromEntity)
+                .toList();
+    }
+
     // ---------- helpers ----------
+
+    /** Interpolación lineal entre dos puntos (t en [0,1]). */
+    private static Point lerp(Point a, Point b, double t) {
+        return new Point(
+                (int) Math.round(a.x() + (b.x() - a.x()) * t),
+                (int) Math.round(a.y() + (b.y() - a.y()) * t));
+    }
+
+    /** Etiqueta de fila estilo hoja de cálculo: 0→A, 25→Z, 26→AA. */
+    private static String rowLabel(int index) {
+        StringBuilder sb = new StringBuilder();
+        int n = index;
+        do {
+            sb.insert(0, (char) ('A' + n % 26));
+            n = n / 26 - 1;
+        } while (n >= 0);
+        return sb.toString();
+    }
 
     /** Valida un polígono opcional: si viene, ha de tener 3+ puntos en rango. */
     private void validatePolygon(List<Point> polygon) {

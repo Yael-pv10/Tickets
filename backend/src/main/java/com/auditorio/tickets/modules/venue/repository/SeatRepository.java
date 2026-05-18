@@ -2,6 +2,7 @@ package com.auditorio.tickets.modules.venue.repository;
 
 import com.auditorio.tickets.modules.venue.model.Seat;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,6 +12,10 @@ import java.util.UUID;
 public interface SeatRepository extends JpaRepository<Seat, UUID> {
 
     List<Seat> findBySectionId(UUID sectionId);
+
+    @Modifying
+    @Query("DELETE FROM Seat s WHERE s.section.id = :sectionId")
+    void deleteBySectionId(@Param("sectionId") UUID sectionId);
 
     @Query("""
         SELECT s FROM Seat s
