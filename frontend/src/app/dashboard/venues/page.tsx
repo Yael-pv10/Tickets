@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminApi, type VenueDto, type SectionDto, type SeatDto } from '@/lib/api/admin';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import VenueMapEditor from './VenueMapEditor';
 
 // Editor de disposición: conversión de unidades de diseño a píxeles.
 const EDIT_SCALE = 0.56;
@@ -109,6 +110,7 @@ function NewVenueForm({ onCreated }: { onCreated: () => void }) {
 function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void }) {
   const [sectionName, setSectionName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showMap, setShowMap] = useState(false);
 
   async function createSection() {
     if (!sectionName.trim()) return;
@@ -139,13 +141,29 @@ function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void 
             {venue.address || 'Sin dirección'} · {venue.capacity} butacas
           </p>
         </div>
-        <button
-          onClick={removeVenue}
-          className="font-mono text-[10px] uppercase tracking-marquee text-curtain hover:text-curtain/80"
-        >
-          Eliminar →
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowMap(true)}
+            className="font-mono text-[10px] uppercase tracking-marquee text-gold hover:text-gold-glow"
+          >
+            Editar mapa
+          </button>
+          <button
+            onClick={removeVenue}
+            className="font-mono text-[10px] uppercase tracking-marquee text-curtain hover:text-curtain/80"
+          >
+            Eliminar →
+          </button>
+        </div>
       </div>
+
+      {showMap && (
+        <VenueMapEditor
+          venue={venue}
+          onClose={() => setShowMap(false)}
+          onChange={onChange}
+        />
+      )}
 
       <VenueBackground venueId={venue.id} />
 
