@@ -189,14 +189,38 @@ public class VenueService {
             throw new BusinessException("Tipo de sección inválido");
         }
         validatePolygon(request.shape());
-        if (type == SectionType.GENERAL_ADMISSION
-                && (request.capacity() == null || request.capacity() <= 0)) {
-            throw new BusinessException("Una sección de admisión general requiere un cupo válido");
+
+        if (type == SectionType.GENERAL_ADMISSION) {
+            Integer capacity = request.capacity();
+            if (capacity == null || capacity <= 0) {
+                throw new BusinessException("Una sección de admisión general requiere un cupo válido");
+            }
+            if (capacity > MAX_BULK_SEATS) {
+                throw new BusinessException("Cupo demasiado alto (máx. " + MAX_BULK_SEATS + ")");
+            }
+            // La admisión general se vende por cupo, pero el flujo de reserva
+            // es por asiento: generamos 'capacity' cupos como asientos internos.
+            boolean regen = section.getType() != SectionType.GENERAL_ADMISSION
+                    || seatRepository.countBySectionId(sectionId) != capacity;
+            if (regen) {
+                if (eventSeatRepository.existsBySeat_Section_Id(sectionId)) {
+                    throw new BusinessException(
+                            "No se puede cambiar el cupo: la sección ya tiene asientos en un evento.");
+                }
+                seatRepository.deleteBySectionId(sectionId);
+                List<Seat> cupos = new ArrayList<>(capacity);
+                for (int i = 1; i <= capacity; i++) {
+                    cupos.add(Seat.builder()
+                            .section(section).rowLabel("GA").seatNumber(i).posX(0).posY(0).build());
+                }
+                seatRepository.saveAll(cupos);
+            }
+            section.setCapacity(capacity);
+        } else {
+            section.setCapacity(null);
         }
         section.setType(type);
         section.setShape(request.shape());
-        // El cupo solo tiene sentido en admisión general.
-        section.setCapacity(type == SectionType.GENERAL_ADMISSION ? request.capacity() : null);
         sectionRepository.save(section);
         return SectionDto.fromEntity(section, seatRepository.countBySectionId(sectionId));
     }
