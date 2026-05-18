@@ -34,6 +34,9 @@ export default function ScanPage() {
   const [dashboard, setDashboard] = useState<TodayDashboard | null>(null);
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
   const autoRescanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Evita validar el mismo QR varias veces: html5-qrcode dispara el callback
+  // una vez por frame hasta que stop() resuelve (que es asíncrono).
+  const handledRef = useRef(false);
 
   useEffect(() => {
     if (!isAuth) {
@@ -60,6 +63,7 @@ export default function ScanPage() {
     setResult(null);
     setError(null);
     setStatus('scanning');
+    handledRef.current = false;
     try {
       const { Html5Qrcode } = await import('html5-qrcode');
       const scanner = new Html5Qrcode(SCAN_REGION_ID);
@@ -69,6 +73,9 @@ export default function ScanPage() {
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 260, height: 260 } },
         async (decoded) => {
+          // Solo el primer frame decodificado cuenta; el resto se ignora.
+          if (handledRef.current) return;
+          handledRef.current = true;
           await scanner.stop().catch(() => {});
           setStatus('validating');
           try {
