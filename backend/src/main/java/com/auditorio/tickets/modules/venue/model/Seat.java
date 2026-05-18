@@ -31,6 +31,15 @@ public class Seat extends AuditEntity {
     @Column(name = "seat_number", nullable = false)
     private int seatNumber;
 
+    /** Coordenadas en el espacio abstracto de diseño del mapa de la sección. */
+    @Column(name = "pos_x", nullable = false)
+    @Builder.Default
+    private int posX = 0;
+
+    @Column(name = "pos_y", nullable = false)
+    @Builder.Default
+    private int posY = 0;
+
     /**
      * Columna generada por PostgreSQL: row_label || seat_number.
      * Hibernate la lee tras INSERT pero no la inserta.

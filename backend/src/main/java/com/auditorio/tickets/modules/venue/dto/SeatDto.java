@@ -9,7 +9,9 @@ public record SeatDto(
         UUID sectionId,
         String rowLabel,
         int seatNumber,
-        String seatCode
+        String seatCode,
+        int posX,
+        int posY
 ) {
     public static SeatDto fromEntity(Seat s) {
         return new SeatDto(
@@ -17,7 +19,9 @@ public record SeatDto(
                 s.getSection().getId(),
                 s.getRowLabel(),
                 s.getSeatNumber(),
-                s.getSeatCode()
+                s.getSeatCode(),
+                s.getPosX(),
+                s.getPosY()
         );
     }
 }

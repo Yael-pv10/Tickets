@@ -9,6 +9,10 @@ public record EventSeatDto(
         UUID seatId,
         String seatCode,
         String sectionName,
+        String rowLabel,
+        int seatNumber,
+        int posX,
+        int posY,
         int priceCents,
         String status
 ) {
@@ -18,6 +22,10 @@ public record EventSeatDto(
                 es.getSeat().getId(),
                 es.getSeat().getSeatCode(),
                 es.getSeat().getSection().getName(),
+                es.getSeat().getRowLabel(),
+                es.getSeat().getSeatNumber(),
+                es.getSeat().getPosX(),
+                es.getSeat().getPosY(),
                 es.getPriceCents(),
                 es.getStatus().name()
         );

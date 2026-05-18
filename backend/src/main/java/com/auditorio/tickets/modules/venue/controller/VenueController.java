@@ -76,4 +76,10 @@ public class VenueController {
                                    @Valid @RequestBody BulkSeatRequest request) {
         return venueService.bulkCreateSeats(sectionId, request);
     }
+
+    @PutMapping("/sections/{sectionId}/layout")
+    public List<SeatDto> updateLayout(@PathVariable UUID sectionId,
+                                      @Valid @RequestBody UpdateSeatLayoutRequest request) {
+        return venueService.updateSectionLayout(sectionId, request);
+    }
 }
