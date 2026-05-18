@@ -55,7 +55,6 @@ export default function EventDetailPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [venueResolved, setVenueResolved] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [mapNote, setMapNote] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -124,6 +123,32 @@ export default function EventDetailPage() {
     }
   }
 
+  // Reserva en una sección de admisión general: toma N cupos disponibles.
+  async function reserveGa(qty: number) {
+    if (!event || !activeSection || !seats) return;
+    if (!isAuth) {
+      router.push(`/login?redirect=/events/${event.id}`);
+      return;
+    }
+    const ids = seats
+      .filter((s) => s.sectionName === activeSection && s.status === 'AVAILABLE')
+      .slice(0, qty)
+      .map((s) => s.id);
+    if (ids.length === 0) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const reservation = await reservationsApi.create(event.id, ids);
+      router.push(`/checkout/${reservation.id}`);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setError(msg ?? 'No se pudo crear la reserva');
+      eventsApi.seats(event.id).then(setSeats).catch(() => {});
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (error && !event) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-24">
@@ -144,6 +169,11 @@ export default function EventDetailPage() {
   const activeSectionSeats = activeSection
     ? seats.filter((s) => s.sectionName === activeSection)
     : [];
+  const activeSectionMeta =
+    activeSection && venue
+      ? venue.sections.find((s) => s.name === activeSection) ?? null
+      : null;
+  const activeIsGa = activeSectionMeta?.type === 'GENERAL_ADMISSION';
 
   return (
     <main className="relative pb-40">
@@ -195,24 +225,9 @@ export default function EventDetailPage() {
           {hasMap && !activeSection && (
             <div className="mt-10">
               <p className="mb-4 font-mono text-[11px] uppercase tracking-marquee text-cream-mute">
-                Toca una sección para ver sus butacas
+                Toca una sección para ver sus lugares
               </p>
-              <VenueOverview
-                venue={venue!}
-                seats={seats}
-                onPickSeated={(name) => {
-                  setActiveSection(name);
-                  setMapNote(null);
-                }}
-                onPickGa={(name) =>
-                  setMapNote(`«${name}» es admisión general · venta en taquilla`)
-                }
-              />
-              {mapNote && (
-                <p className="mt-4 text-center font-mono text-xs uppercase tracking-marquee text-gold">
-                  {mapNote}
-                </p>
-              )}
+              <VenueOverview venue={venue!} seats={seats} onPick={setActiveSection} />
             </div>
           )}
 
@@ -227,13 +242,22 @@ export default function EventDetailPage() {
               <h3 className="mt-4 font-display text-2xl font-medium tracking-tight text-cream">
                 {activeSection}
               </h3>
-              <div className="mt-6">
-                <SectionMap
+              {activeIsGa ? (
+                <GaPanel
                   seats={activeSectionSeats}
-                  selected={selected}
-                  onToggle={toggleSeat}
+                  submitting={submitting}
+                  error={error}
+                  onReserve={reserveGa}
                 />
-              </div>
+              ) : (
+                <div className="mt-6">
+                  <SectionMap
+                    seats={activeSectionSeats}
+                    selected={selected}
+                    onToggle={toggleSeat}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -421,13 +445,11 @@ function polyCentroid(p: Point[]): { x: number; y: number } {
 function VenueOverview({
   venue,
   seats,
-  onPickSeated,
-  onPickGa,
+  onPick,
 }: {
   venue: Venue;
   seats: EventSeatDto[];
-  onPickSeated: (sectionName: string) => void;
-  onPickGa: (sectionName: string) => void;
+  onPick: (sectionName: string) => void;
 }) {
   const [hasBg, setHasBg] = useState(false);
   const bgUrl = venuesApi.backgroundUrl(venue.id);
@@ -476,20 +498,21 @@ function VenueOverview({
           if (!s.shape || s.shape.length < 3) return null;
           const c = polyCentroid(s.shape);
           const ga = s.type === 'GENERAL_ADMISSION';
-          const soldOut =
-            !ga && !seats.some((x) => x.sectionName === s.name && x.status === 'AVAILABLE');
-          const fill = ga ? '#c9a24b' : soldOut ? '#2a2722' : '#5b8a72';
+          const soldOut = !seats.some(
+            (x) => x.sectionName === s.name && x.status === 'AVAILABLE'
+          );
+          const fill = soldOut ? '#2a2722' : ga ? '#c9a24b' : '#5b8a72';
           return (
             <g
               key={s.id}
-              onClick={() => (ga ? onPickGa(s.name) : onPickSeated(s.name))}
+              onClick={() => onPick(s.name)}
               className="cursor-pointer transition hover:opacity-80"
             >
               <polygon
                 points={polyPoints(s.shape)}
                 fill={fill}
-                fillOpacity={ga ? 0.28 : soldOut ? 0.55 : 0.32}
-                stroke={ga ? '#c9a24b' : soldOut ? '#4a4640' : '#5b8a72'}
+                fillOpacity={soldOut ? 0.55 : 0.3}
+                stroke={soldOut ? '#4a4640' : ga ? '#c9a24b' : '#5b8a72'}
                 strokeWidth={u}
               />
               <text
@@ -505,17 +528,92 @@ function VenueOverview({
               <text
                 x={c.x}
                 y={c.y + u * 6}
-                fill={ga ? '#c9a24b' : soldOut ? '#8c8676' : '#9db8a8'}
+                fill={soldOut ? '#8c8676' : ga ? '#c9a24b' : '#9db8a8'}
                 fontSize={u * 4}
                 textAnchor="middle"
                 dominantBaseline="middle"
               >
-                {ga ? 'taquilla' : soldOut ? 'agotada' : 'disponible'}
+                {soldOut ? 'agotada' : ga ? 'general' : 'disponible'}
               </text>
             </g>
           );
         })}
       </svg>
+    </div>
+  );
+}
+
+/** Compra en una sección de admisión general: se elige una cantidad. */
+function GaPanel({
+  seats,
+  submitting,
+  error,
+  onReserve,
+}: {
+  seats: EventSeatDto[];
+  submitting: boolean;
+  error: string | null;
+  onReserve: (qty: number) => void;
+}) {
+  const available = seats.filter((s) => s.status === 'AVAILABLE');
+  const price = available[0]?.priceCents ?? seats[0]?.priceCents ?? 0;
+  const max = Math.min(available.length, MAX_SEATS);
+  const [qty, setQty] = useState(1);
+  const effectiveQty = Math.max(1, Math.min(qty, max));
+
+  if (seats.length === 0) {
+    return (
+      <p className="mt-6 text-sm text-cream-mute">
+        Esta sección de admisión general no está habilitada para este evento.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-6 max-w-md border border-ink-300 bg-ink-100 p-6">
+      <p className="font-mono text-[10px] uppercase tracking-marquee text-gold">
+        Admisión general
+      </p>
+      <p className="mt-2 text-sm text-cream-dim">
+        {available.length > 0 ? `${available.length} lugares disponibles` : 'Sección agotada'}
+      </p>
+
+      {available.length > 0 && (
+        <>
+          <div className="mt-5 flex items-end gap-5">
+            <label className="block">
+              <span className="eyebrow">Cantidad</span>
+              <input
+                type="number"
+                min={1}
+                max={max}
+                value={qty}
+                onChange={(e) =>
+                  setQty(Math.max(1, Math.min(max, parseInt(e.target.value || '1', 10))))
+                }
+                className="mt-1 w-24 border border-ink-300 bg-ink-50 px-3 py-2 text-sm text-cream"
+              />
+            </label>
+            <div>
+              <span className="eyebrow">Total</span>
+              <p className="mt-1 font-display text-3xl font-semibold leading-none text-gold-gradient">
+                {formatPrice(price * effectiveQty)}
+              </p>
+            </div>
+          </div>
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider2 text-cream-mute">
+            {formatPrice(price)} c/u · máximo {MAX_SEATS} por compra
+          </p>
+          <Button
+            className="mt-5 w-full"
+            loading={submitting}
+            onClick={() => onReserve(effectiveQty)}
+          >
+            Reservar {effectiveQty} →
+          </Button>
+        </>
+      )}
+      {error && <p className="mt-3 text-xs text-curtain">{error}</p>}
     </div>
   );
 }
