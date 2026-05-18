@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -117,6 +118,27 @@ public class VenueService {
                             + "Elimina primero esos eventos.");
         }
         sectionRepository.deleteById(sectionId);
+    }
+
+    /** Guarda las coordenadas de los asientos que el admin reacomodó en el editor. */
+    @Transactional
+    public List<SeatDto> updateSectionLayout(UUID sectionId, UpdateSeatLayoutRequest request) {
+        if (!sectionRepository.existsById(sectionId)) {
+            throw new ResourceNotFoundException("Sección no encontrada");
+        }
+        List<Seat> seats = seatRepository.findBySectionId(sectionId);
+        Map<UUID, Seat> byId = seats.stream().collect(Collectors.toMap(Seat::getId, s -> s));
+
+        for (UpdateSeatLayoutRequest.SeatPosition p : request.seats()) {
+            Seat seat = byId.get(p.seatId());
+            if (seat == null) {
+                throw new BusinessException("El asiento " + p.seatId() + " no pertenece a la sección");
+            }
+            seat.setPosX(p.posX());
+            seat.setPosY(p.posY());
+        }
+        // Entidades gestionadas: el dirty checking persiste los cambios al commit.
+        return seats.stream().map(SeatDto::fromEntity).toList();
     }
 
     public List<SeatDto> listSeatsOfSection(UUID sectionId) {
