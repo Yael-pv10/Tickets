@@ -16,6 +16,9 @@ public interface EventSeatRepository extends JpaRepository<EventSeat, UUID> {
 
     List<EventSeat> findByEventId(UUID eventId);
 
+    /** ¿Algún asiento de esta sección ya está asignado a un evento? */
+    boolean existsBySeat_Section_Id(UUID sectionId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT es FROM EventSeat es WHERE es.id = :id")
     Optional<EventSeat> findByIdForUpdate(@Param("id") UUID id);

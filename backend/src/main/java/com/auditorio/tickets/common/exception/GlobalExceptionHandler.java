@@ -1,6 +1,7 @@
 package com.auditorio.tickets.common.exception;
 
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -50,6 +51,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Map<String, Object>> handleConstraint(ConstraintViolationException ex) {
         return build(HttpStatus.BAD_REQUEST, "Errores de validación", null);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        // Red de seguridad: una FK/constraint que no se validó antes no debe ser un 500.
+        return build(HttpStatus.CONFLICT,
+                "La operación no se puede completar porque hay datos relacionados que dependen de este registro.",
+                null);
     }
 
     @ExceptionHandler(Exception.class)
