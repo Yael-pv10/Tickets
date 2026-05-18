@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { eventsApi, type EventDto, type EventSeatDto } from '@/lib/api/events';
 import { reservationsApi } from '@/lib/api/reservations';
@@ -9,6 +9,11 @@ import { Badge } from '@/components/ui/Badge';
 import { useAuthStore } from '@/store/auth-store';
 
 const MAX_SEATS = 8;
+
+// El backend guarda posX/posY en unidades abstractas de diseño.
+// COORD_TO_PX las convierte a píxeles; SEAT_PX es el tamaño del asiento.
+const COORD_TO_PX = 0.5;
+const SEAT_PX = 42;
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('es', {
@@ -203,25 +208,7 @@ export default function EventDetailPage() {
                       {sectionSeats.length} butacas
                     </span>
                   </div>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(46px,1fr))] gap-2.5">
-                    {sectionSeats.map((seat) => {
-                      const isSelected = selected.has(seat.id);
-                      return (
-                        <button
-                          key={seat.id}
-                          type="button"
-                          onClick={() => toggleSeat(seat)}
-                          disabled={seat.status !== 'AVAILABLE' && !isSelected}
-                          aria-pressed={isSelected}
-                          aria-label={`Butaca ${seat.seatCode}, ${seat.status}`}
-                          title={`${seat.seatCode} · ${formatPrice(seat.priceCents)}`}
-                          className={`seat-shape flex h-12 items-center justify-center border font-mono text-xs font-medium ${seatClasses(seat.status, isSelected)}`}
-                        >
-                          {seat.seatCode}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <SectionMap seats={sectionSeats} selected={selected} onToggle={toggleSeat} />
                 </section>
               );
             })}
@@ -263,6 +250,91 @@ export default function EventDetailPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * Dibuja los asientos de una sección según sus coordenadas posX/posY.
+ * El mapa se escala para caber en el ancho disponible (ResizeObserver),
+ * así cualquier forma — rectangular, en herradura, curva — se ve completa.
+ */
+function SectionMap({
+  seats,
+  selected,
+  onToggle,
+}: {
+  seats: EventSeatDto[];
+  selected: Set<string>;
+  onToggle: (seat: EventSeatDto) => void;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  const box = useMemo(() => {
+    const minX = seats.reduce((m, s) => Math.min(m, s.posX), Infinity);
+    const minY = seats.reduce((m, s) => Math.min(m, s.posY), Infinity);
+    const maxX = seats.reduce((m, s) => Math.max(m, s.posX), -Infinity);
+    const maxY = seats.reduce((m, s) => Math.max(m, s.posY), -Infinity);
+    return {
+      minX,
+      minY,
+      width: (maxX - minX) * COORD_TO_PX + SEAT_PX,
+      height: (maxY - minY) * COORD_TO_PX + SEAT_PX,
+    };
+  }, [seats]);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const fit = () => setScale(Math.min(1, el.clientWidth / box.width));
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [box.width]);
+
+  if (seats.length === 0) return null;
+
+  return (
+    <div ref={wrapperRef} className="w-full">
+      <div
+        className="relative mx-auto"
+        style={{ width: box.width * scale, height: box.height * scale }}
+      >
+        <div
+          className="absolute left-0 top-0 origin-top-left"
+          style={{ width: box.width, height: box.height, transform: `scale(${scale})` }}
+        >
+          {seats.map((seat) => {
+            const isSelected = selected.has(seat.id);
+            return (
+              <button
+                key={seat.id}
+                type="button"
+                onClick={() => onToggle(seat)}
+                disabled={seat.status !== 'AVAILABLE' && !isSelected}
+                aria-pressed={isSelected}
+                aria-label={`Butaca ${seat.seatCode}, ${seat.status}`}
+                title={`${seat.seatCode} · ${formatPrice(seat.priceCents)}`}
+                style={{
+                  position: 'absolute',
+                  left: (seat.posX - box.minX) * COORD_TO_PX,
+                  top: (seat.posY - box.minY) * COORD_TO_PX,
+                  width: SEAT_PX,
+                  height: SEAT_PX,
+                }}
+                className={`seat-shape flex items-center justify-center border font-mono text-[10px] font-medium transition ${seatClasses(
+                  seat.status,
+                  isSelected
+                )}`}
+              >
+                {seat.seatCode}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -16,6 +16,10 @@ export interface EventSeatDto {
   seatId: string;
   seatCode: string;
   sectionName: string;
+  rowLabel: string;
+  seatNumber: number;
+  posX: number;
+  posY: number;
   priceCents: number;
   status: 'AVAILABLE' | 'LOCKED' | 'SOLD' | 'BLOCKED';
 }
