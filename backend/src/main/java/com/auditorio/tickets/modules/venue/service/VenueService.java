@@ -7,12 +7,17 @@ import com.auditorio.tickets.modules.venue.dto.*;
 import com.auditorio.tickets.modules.venue.model.Seat;
 import com.auditorio.tickets.modules.venue.model.Section;
 import com.auditorio.tickets.modules.venue.model.Venue;
+import com.auditorio.tickets.modules.venue.model.VenueBackground;
 import com.auditorio.tickets.modules.venue.repository.SeatRepository;
 import com.auditorio.tickets.modules.venue.repository.SectionRepository;
+import com.auditorio.tickets.modules.venue.repository.VenueBackgroundRepository;
 import com.auditorio.tickets.modules.venue.repository.VenueRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -32,19 +37,26 @@ public class VenueService {
     /** Separación entre asientos en la cuadrícula de disposición por defecto. */
     private static final int SEAT_SPACING = 100;
 
+    private static final long MAX_BG_BYTES = 8L * 1024 * 1024;
+    private static final Set<String> ALLOWED_BG_MIME =
+            Set.of("image/png", "image/jpeg", "image/webp");
+
     private final VenueRepository venueRepository;
     private final SectionRepository sectionRepository;
     private final SeatRepository seatRepository;
     private final EventSeatRepository eventSeatRepository;
+    private final VenueBackgroundRepository venueBackgroundRepository;
 
     public VenueService(VenueRepository venueRepository,
                         SectionRepository sectionRepository,
                         SeatRepository seatRepository,
-                        EventSeatRepository eventSeatRepository) {
+                        EventSeatRepository eventSeatRepository,
+                        VenueBackgroundRepository venueBackgroundRepository) {
         this.venueRepository = venueRepository;
         this.sectionRepository = sectionRepository;
         this.seatRepository = seatRepository;
         this.eventSeatRepository = eventSeatRepository;
+        this.venueBackgroundRepository = venueBackgroundRepository;
     }
 
     public List<VenueDto> listAll() {
@@ -88,6 +100,51 @@ public class VenueService {
         }
         // CascadeType.ALL + ON DELETE CASCADE en BD eliminan sections y seats.
         venueRepository.deleteById(id);
+    }
+
+    // ---------- imagen de fondo (plano) ----------
+
+    @Transactional
+    public void setBackground(UUID venueId, MultipartFile file) {
+        if (!venueRepository.existsById(venueId)) {
+            throw new ResourceNotFoundException("Venue no encontrado");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("No se recibió ninguna imagen");
+        }
+        String mime = file.getContentType();
+        if (mime == null || !ALLOWED_BG_MIME.contains(mime)) {
+            throw new BusinessException("Formato no admitido. Usa PNG, JPEG o WebP");
+        }
+        if (file.getSize() > MAX_BG_BYTES) {
+            throw new BusinessException("La imagen supera el tamaño máximo (8 MB)");
+        }
+        byte[] data;
+        try {
+            data = file.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException("No se pudo leer la imagen");
+        }
+        VenueBackground bg = venueBackgroundRepository.findById(venueId)
+                .orElseGet(() -> {
+                    VenueBackground b = new VenueBackground();
+                    b.setVenueId(venueId);
+                    return b;
+                });
+        bg.setImage(data);
+        bg.setMime(mime);
+        bg.setUpdatedAt(Instant.now());
+        venueBackgroundRepository.save(bg);
+    }
+
+    @Transactional
+    public void deleteBackground(UUID venueId) {
+        venueBackgroundRepository.deleteById(venueId);
+    }
+
+    public VenueBackground getBackground(UUID venueId) {
+        return venueBackgroundRepository.findById(venueId)
+                .orElseThrow(() -> new ResourceNotFoundException("El auditorio no tiene plano"));
     }
 
     // ---------- sections ----------

@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -48,6 +49,21 @@ public class VenueController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
         venueService.delete(id);
+    }
+
+    // ---------- imagen de fondo (plano) ----------
+
+    @PutMapping("/{id}/background")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void uploadBackground(@PathVariable UUID id,
+                                 @RequestParam("file") MultipartFile file) {
+        venueService.setBackground(id, file);
+    }
+
+    @DeleteMapping("/{id}/background")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteBackground(@PathVariable UUID id) {
+        venueService.deleteBackground(id);
     }
 
     // ---------- sections ----------
