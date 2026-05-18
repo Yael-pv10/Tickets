@@ -1,5 +1,6 @@
 package com.auditorio.tickets.modules.venue.controller;
 
+import com.auditorio.tickets.modules.venue.dto.VenueDto;
 import com.auditorio.tickets.modules.venue.model.VenueBackground;
 import com.auditorio.tickets.modules.venue.service.VenueService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +24,12 @@ public class PublicVenueController {
 
     public PublicVenueController(VenueService venueService) {
         this.venueService = venueService;
+    }
+
+    /** Geometría del auditorio (lienzo, escenario y secciones) para el mapa. */
+    @GetMapping("/{id}")
+    public VenueDto get(@PathVariable UUID id) {
+        return venueService.get(id);
     }
 
     /** Sirve la imagen del plano del auditorio para el mapa interactivo. */
