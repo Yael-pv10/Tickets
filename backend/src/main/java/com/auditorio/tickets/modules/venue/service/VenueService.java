@@ -14,7 +14,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 @Service
@@ -22,6 +27,9 @@ import java.util.UUID;
 public class VenueService {
 
     private static final int MAX_BULK_SEATS = 5_000;
+
+    /** Separación entre asientos en la cuadrícula de disposición por defecto. */
+    private static final int SEAT_SPACING = 100;
 
     private final VenueRepository venueRepository;
     private final SectionRepository sectionRepository;
@@ -139,6 +147,11 @@ public class VenueService {
             throw new BusinessException("Demasiados asientos en una sola operación (máx. " + MAX_BULK_SEATS + ")");
         }
 
+        // Disposición por defecto en cuadrícula: pos_x según el número de
+        // asiento y pos_y según el orden de la fila. Se consideran las filas
+        // ya existentes para que las nuevas no se solapen con ellas.
+        Map<String, Integer> rowRank = buildRowRank(sectionId, request);
+
         List<Seat> toCreate = new ArrayList<>(total);
         for (BulkSeatRequest.RowRange r : request.rows()) {
             for (int n = r.fromNumber(); n <= r.toNumber(); n++) {
@@ -146,6 +159,8 @@ public class VenueService {
                         .section(section)
                         .rowLabel(r.rowLabel())
                         .seatNumber(n)
+                        .posX((n - 1) * SEAT_SPACING)
+                        .posY(rowRank.get(r.rowLabel()) * SEAT_SPACING)
                         .build());
             }
         }
@@ -162,6 +177,23 @@ public class VenueService {
     }
 
     // ---------- helpers ----------
+
+    /**
+     * Asigna un índice de orden a cada fila de la sección (existentes + nuevas),
+     * ordenadas A..Z, AA.. — mismo criterio que la migración V4.
+     */
+    private Map<String, Integer> buildRowRank(UUID sectionId, BulkSeatRequest request) {
+        Set<String> rows = new TreeSet<>(
+                Comparator.comparingInt(String::length).thenComparing(Comparator.naturalOrder()));
+        seatRepository.findBySectionId(sectionId).forEach(s -> rows.add(s.getRowLabel()));
+        request.rows().forEach(r -> rows.add(r.rowLabel()));
+        Map<String, Integer> rank = new HashMap<>();
+        int idx = 0;
+        for (String row : rows) {
+            rank.put(row, idx++);
+        }
+        return rank;
+    }
 
     private List<SectionDto> sectionsOf(UUID venueId) {
         return sectionRepository.findByVenueId(venueId).stream()
