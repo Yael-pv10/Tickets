@@ -147,6 +147,8 @@ function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void 
         </button>
       </div>
 
+      <VenueBackground venueId={venue.id} />
+
       <div className="mt-6 flex gap-3">
         <Input
           placeholder="Nombre de la sección (ej. Platea)"
@@ -163,6 +165,94 @@ function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void 
         ))}
       </div>
     </article>
+  );
+}
+
+/** Subida / vista / borrado de la imagen del plano del auditorio. */
+function VenueBackground({ venueId }: { venueId: string }) {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+  const [version, setVersion] = useState(0);
+  const [hasImage, setHasImage] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await adminApi.uploadBackground(venueId, file);
+      setHasImage(true);
+      setVersion((v) => v + 1);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setError(msg ?? 'No se pudo subir el plano');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm('¿Quitar el plano del auditorio?')) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await adminApi.deleteBackground(venueId);
+      setHasImage(false);
+    } catch {
+      setError('No se pudo quitar el plano');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 border border-ink-300/60 bg-ink-50/40 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-marquee text-cream-mute">
+            Plano del auditorio
+          </p>
+          <p className="mt-1 text-xs text-cream-dim">
+            Imagen de guía para dibujar el mapa (PNG, JPEG o WebP).
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="cursor-pointer font-mono text-[10px] uppercase tracking-marquee text-gold hover:text-gold-glow">
+            {busy ? 'Trabajando…' : 'Subir / reemplazar'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={upload}
+              disabled={busy}
+              className="hidden"
+            />
+          </label>
+          {hasImage && (
+            <button
+              onClick={remove}
+              disabled={busy}
+              className="font-mono text-[10px] uppercase tracking-marquee text-curtain hover:text-curtain/80"
+            >
+              Quitar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {hasImage && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`${apiBase}/venues/${venueId}/background?v=${version}`}
+          alt="Plano del auditorio"
+          onError={() => setHasImage(false)}
+          className="mt-3 max-h-40 rounded border border-ink-300"
+        />
+      )}
+      {error && <p className="mt-2 text-xs text-curtain">{error}</p>}
+    </div>
   );
 }
 

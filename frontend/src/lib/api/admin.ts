@@ -3,10 +3,20 @@ import type { EventDto } from './events';
 
 // ---------- Venues ----------
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type SectionType = 'SEATED' | 'GENERAL_ADMISSION';
+
 export interface SectionDto {
   id: string;
   venueId: string;
   name: string;
+  type: SectionType;
+  shape: Point[] | null;
+  capacity: number | null;
   seatCount: number;
 }
 
@@ -15,6 +25,9 @@ export interface VenueDto {
   name: string;
   address: string | null;
   capacity: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  stageShape: Point[] | null;
   sections: SectionDto[];
 }
 
@@ -82,6 +95,43 @@ export const adminApi = {
       { seats }
     );
     return data;
+  },
+  async fillSection(
+    sectionId: string,
+    input: { corners: Point[]; rows: number; seatsPerRow: number }
+  ): Promise<SeatDto[]> {
+    const { data } = await apiClient.post<SeatDto[]>(
+      `/admin/venues/sections/${sectionId}/seats/fill`,
+      input
+    );
+    return data;
+  },
+  async updateSectionShape(
+    sectionId: string,
+    input: { type: SectionType; shape: Point[] | null; capacity: number | null }
+  ): Promise<SectionDto> {
+    const { data } = await apiClient.put<SectionDto>(
+      `/admin/venues/sections/${sectionId}/shape`,
+      input
+    );
+    return data;
+  },
+
+  // Mapa del auditorio
+  async updateCanvas(
+    venueId: string,
+    input: { canvasWidth: number; canvasHeight: number; stageShape: Point[] | null }
+  ): Promise<VenueDto> {
+    const { data } = await apiClient.put<VenueDto>(`/admin/venues/${venueId}/canvas`, input);
+    return data;
+  },
+  async uploadBackground(venueId: string, file: File): Promise<void> {
+    const form = new FormData();
+    form.append('file', file);
+    await apiClient.put(`/admin/venues/${venueId}/background`, form);
+  },
+  async deleteBackground(venueId: string): Promise<void> {
+    await apiClient.delete(`/admin/venues/${venueId}/background`);
   },
 
   // Events
