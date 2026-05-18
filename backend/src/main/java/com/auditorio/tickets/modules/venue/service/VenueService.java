@@ -2,6 +2,7 @@ package com.auditorio.tickets.modules.venue.service;
 
 import com.auditorio.tickets.common.exception.BusinessException;
 import com.auditorio.tickets.common.exception.ResourceNotFoundException;
+import com.auditorio.tickets.modules.event.repository.EventRepository;
 import com.auditorio.tickets.modules.event.repository.EventSeatRepository;
 import com.auditorio.tickets.modules.venue.dto.*;
 import com.auditorio.tickets.modules.venue.model.Point;
@@ -47,17 +48,20 @@ public class VenueService {
     private final SectionRepository sectionRepository;
     private final SeatRepository seatRepository;
     private final EventSeatRepository eventSeatRepository;
+    private final EventRepository eventRepository;
     private final VenueBackgroundRepository venueBackgroundRepository;
 
     public VenueService(VenueRepository venueRepository,
                         SectionRepository sectionRepository,
                         SeatRepository seatRepository,
                         EventSeatRepository eventSeatRepository,
+                        EventRepository eventRepository,
                         VenueBackgroundRepository venueBackgroundRepository) {
         this.venueRepository = venueRepository;
         this.sectionRepository = sectionRepository;
         this.seatRepository = seatRepository;
         this.eventSeatRepository = eventSeatRepository;
+        this.eventRepository = eventRepository;
         this.venueBackgroundRepository = venueBackgroundRepository;
     }
 
@@ -112,6 +116,13 @@ public class VenueService {
     public void delete(UUID id) {
         if (!venueRepository.existsById(id)) {
             throw new ResourceNotFoundException("Venue no encontrado");
+        }
+        // events.venue_id no tiene ON DELETE CASCADE: avisamos con un mensaje claro
+        // en vez de dejar que falle con una violación de integridad.
+        if (eventRepository.existsByVenue_Id(id)) {
+            throw new BusinessException(
+                    "No se puede eliminar el auditorio: tiene eventos asociados. "
+                            + "Elimina primero esos eventos.");
         }
         // CascadeType.ALL + ON DELETE CASCADE en BD eliminan sections y seats.
         venueRepository.deleteById(id);

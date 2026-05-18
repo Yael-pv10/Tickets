@@ -111,14 +111,19 @@ function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void 
   const [sectionName, setSectionName] = useState('');
   const [creating, setCreating] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function createSection() {
     if (!sectionName.trim()) return;
     setCreating(true);
+    setError(null);
     try {
       await adminApi.createSection(venue.id, sectionName);
       setSectionName('');
       onChange();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setError(msg ?? 'No se pudo crear la sección');
     } finally {
       setCreating(false);
     }
@@ -126,8 +131,14 @@ function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void 
 
   async function removeVenue() {
     if (!confirm(`¿Eliminar "${venue.name}" con todas sus secciones y butacas?`)) return;
-    await adminApi.deleteVenue(venue.id);
-    onChange();
+    setError(null);
+    try {
+      await adminApi.deleteVenue(venue.id);
+      onChange();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setError(msg ?? 'No se pudo eliminar el auditorio');
+    }
   }
 
   return (
@@ -156,6 +167,8 @@ function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void 
           </button>
         </div>
       </div>
+
+      {error && <p className="mt-3 text-sm text-curtain">{error}</p>}
 
       {showMap && (
         <VenueMapEditor
