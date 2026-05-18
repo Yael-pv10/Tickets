@@ -17,4 +17,7 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     /** Eventos cuyo inicio cae dentro de un rango [from, to). Para el panel del staff. */
     List<Event> findByStatusAndStartsAtBetweenOrderByStartsAtAsc(
             EventStatus status, Instant from, Instant to);
+
+    /** ¿El auditorio tiene algún evento asociado? */
+    boolean existsByVenue_Id(UUID venueId);
 }
