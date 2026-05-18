@@ -1,9 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { adminApi, type VenueDto, type SectionDto } from '@/lib/api/admin';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { adminApi, type VenueDto, type SectionDto, type SeatDto } from '@/lib/api/admin';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+
+// Editor de disposición: conversión de unidades de diseño a píxeles.
+const EDIT_SCALE = 0.56;
+const EDIT_SEAT_PX = 40;
+const SNAP_UNITS = 25;
 
 export default function VenuesAdminPage() {
   const [venues, setVenues] = useState<VenueDto[]>([]);
@@ -163,6 +168,7 @@ function VenueCard({ venue, onChange }: { venue: VenueDto; onChange: () => void 
 
 function SectionRow({ section, onChange }: { section: SectionDto; onChange: () => void }) {
   const [showBulk, setShowBulk] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
   const [rowLabel, setRowLabel] = useState('A');
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(10);
@@ -212,6 +218,12 @@ function SectionRow({ section, onChange }: { section: SectionDto; onChange: () =
             {showBulk ? '× Cerrar' : '+ Cargar fila'}
           </button>
           <button
+            onClick={() => setShowEditor(!showEditor)}
+            className="font-mono text-[10px] uppercase tracking-marquee text-gold hover:text-gold-glow"
+          >
+            {showEditor ? '× Cerrar' : 'Disposición'}
+          </button>
+          <button
             onClick={removeSection}
             className="font-mono text-[10px] uppercase tracking-marquee text-curtain hover:text-curtain/80"
           >
@@ -250,6 +262,192 @@ function SectionRow({ section, onChange }: { section: SectionDto; onChange: () =
           {error && <p className="col-span-4 text-xs text-curtain">{error}</p>}
         </div>
       )}
+
+      {showEditor && <SeatLayoutEditor sectionId={section.id} />}
+    </div>
+  );
+}
+
+/**
+ * Editor visual de disposición: muestra los asientos de una sección en un
+ * lienzo y permite arrastrarlos para darle cualquier forma a la sala
+ * (rectangular, en herradura, curva...). Guarda las coordenadas posX/posY.
+ */
+function SeatLayoutEditor({ sectionId }: { sectionId: string }) {
+  const [seats, setSeats] = useState<SeatDto[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [snap, setSnap] = useState(true);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const dragRef = useRef<{ clientX: number; clientY: number; origX: number; origY: number } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    adminApi
+      .listSeats(sectionId)
+      .then((s) => active && setSeats(s))
+      .catch(() => active && setError('No se pudieron cargar los asientos'));
+    return () => {
+      active = false;
+    };
+  }, [sectionId]);
+
+  const content = useMemo(() => {
+    if (!seats || seats.length === 0) return { width: 0, height: 0 };
+    const maxX = seats.reduce((m, s) => Math.max(m, s.posX), 0);
+    const maxY = seats.reduce((m, s) => Math.max(m, s.posY), 0);
+    return {
+      width: maxX * EDIT_SCALE + EDIT_SEAT_PX + 24,
+      height: maxY * EDIT_SCALE + EDIT_SEAT_PX + 24,
+    };
+  }, [seats]);
+
+  function onPointerDown(e: React.PointerEvent, seat: SeatDto) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { clientX: e.clientX, clientY: e.clientY, origX: seat.posX, origY: seat.posY };
+    setDragId(seat.id);
+  }
+
+  function onPointerMove(e: React.PointerEvent, id: string) {
+    const d = dragRef.current;
+    if (!d) return;
+    const posX = Math.max(0, Math.round(d.origX + (e.clientX - d.clientX) / EDIT_SCALE));
+    const posY = Math.max(0, Math.round(d.origY + (e.clientY - d.clientY) / EDIT_SCALE));
+    setSeats((prev) => prev && prev.map((s) => (s.id === id ? { ...s, posX, posY } : s)));
+    setDirty(true);
+    setSaved(false);
+  }
+
+  function onPointerUp(id: string) {
+    if (dragRef.current && snap) {
+      setSeats((prev) =>
+        prev &&
+        prev.map((s) =>
+          s.id === id
+            ? {
+                ...s,
+                posX: Math.round(s.posX / SNAP_UNITS) * SNAP_UNITS,
+                posY: Math.round(s.posY / SNAP_UNITS) * SNAP_UNITS,
+              }
+            : s
+        )
+      );
+    }
+    dragRef.current = null;
+    setDragId(null);
+  }
+
+  async function save() {
+    if (!seats) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await adminApi.updateLayout(
+        sectionId,
+        seats.map((s) => ({ seatId: s.id, posX: s.posX, posY: s.posY }))
+      );
+      setSeats(updated);
+      setDirty(false);
+      setSaved(true);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setError(msg ?? 'No se pudo guardar la disposición');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function discard() {
+    setSeats(null);
+    setDirty(false);
+    setSaved(false);
+    setError(null);
+    try {
+      setSeats(await adminApi.listSeats(sectionId));
+    } catch {
+      setError('No se pudieron recargar los asientos');
+    }
+  }
+
+  if (error && !seats) return <p className="mt-5 text-xs text-curtain">{error}</p>;
+  if (!seats)
+    return (
+      <p className="mt-5 font-mono text-[10px] uppercase tracking-marquee text-cream-mute">
+        Cargando asientos…
+      </p>
+    );
+  if (seats.length === 0)
+    return (
+      <p className="mt-5 text-xs text-cream-mute">
+        Esta sección no tiene asientos. Crea filas con «+ Cargar fila» antes de editar la disposición.
+      </p>
+    );
+
+  return (
+    <div className="mt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="font-mono text-[10px] uppercase tracking-marquee text-cream-mute">
+          Arrastra los asientos para darle forma a la sala
+        </p>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider2 text-cream-mute">
+            <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
+            Ajustar a cuadrícula
+          </label>
+          <button
+            onClick={discard}
+            className="font-mono text-[10px] uppercase tracking-marquee text-cream-mute hover:text-cream"
+          >
+            Descartar
+          </button>
+          <Button onClick={save} loading={saving} size="sm">
+            Guardar
+          </Button>
+        </div>
+      </div>
+
+      {saved && <p className="mt-2 text-xs text-sage">Disposición guardada.</p>}
+      {dirty && !saved && <p className="mt-2 text-xs text-gold">Cambios sin guardar.</p>}
+      {error && <p className="mt-2 text-xs text-curtain">{error}</p>}
+
+      <div className="mt-3 border border-ink-300 bg-ink/60">
+        <div className="border-b border-ink-300/60 py-1 text-center font-mono text-[9px] uppercase tracking-marquee text-gold/60">
+          · Escenario ·
+        </div>
+        <div className="max-h-[440px] overflow-auto">
+          <div
+            className="relative"
+            style={{ width: content.width, height: content.height, minWidth: '100%' }}
+          >
+            {seats.map((seat) => (
+              <div
+                key={seat.id}
+                onPointerDown={(e) => onPointerDown(e, seat)}
+                onPointerMove={(e) => onPointerMove(e, seat.id)}
+                onPointerUp={() => onPointerUp(seat.id)}
+                title={seat.seatCode}
+                style={{
+                  position: 'absolute',
+                  left: seat.posX * EDIT_SCALE,
+                  top: seat.posY * EDIT_SCALE,
+                  width: EDIT_SEAT_PX,
+                  height: EDIT_SEAT_PX,
+                  touchAction: 'none',
+                }}
+                className={`seat-shape flex select-none items-center justify-center border font-mono text-[10px] font-medium ${
+                  dragId === seat.id
+                    ? 'z-10 cursor-grabbing border-gold bg-gold text-ink'
+                    : 'cursor-grab border-sage/40 bg-ink-100 text-cream-dim hover:border-sage'
+                }`}
+              >
+                {seat.seatCode}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

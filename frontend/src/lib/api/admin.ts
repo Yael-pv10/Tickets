@@ -24,6 +24,8 @@ export interface SeatDto {
   rowLabel: string;
   seatNumber: number;
   seatCode: string;
+  posX: number;
+  posY: number;
 }
 
 export interface AdminUser {
@@ -68,6 +70,16 @@ export const adminApi = {
     const { data } = await apiClient.post<SeatDto[]>(
       `/admin/venues/sections/${sectionId}/seats/bulk`,
       { rows }
+    );
+    return data;
+  },
+  async updateLayout(
+    sectionId: string,
+    seats: Array<{ seatId: string; posX: number; posY: number }>
+  ): Promise<SeatDto[]> {
+    const { data } = await apiClient.put<SeatDto[]>(
+      `/admin/venues/sections/${sectionId}/layout`,
+      { seats }
     );
     return data;
   },
