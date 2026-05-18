@@ -4,8 +4,10 @@ import com.auditorio.tickets.common.exception.BusinessException;
 import com.auditorio.tickets.common.exception.ResourceNotFoundException;
 import com.auditorio.tickets.modules.event.repository.EventSeatRepository;
 import com.auditorio.tickets.modules.venue.dto.*;
+import com.auditorio.tickets.modules.venue.model.Point;
 import com.auditorio.tickets.modules.venue.model.Seat;
 import com.auditorio.tickets.modules.venue.model.Section;
+import com.auditorio.tickets.modules.venue.model.SectionType;
 import com.auditorio.tickets.modules.venue.model.Venue;
 import com.auditorio.tickets.modules.venue.model.VenueBackground;
 import com.auditorio.tickets.modules.venue.repository.SeatRepository;
@@ -93,6 +95,19 @@ public class VenueService {
         return VenueDto.fromEntity(venue, sectionsOf(venue.getId()));
     }
 
+    /** Configura el lienzo del auditorio y el polígono del escenario. */
+    @Transactional
+    public VenueDto updateVenueCanvas(UUID venueId, UpdateVenueCanvasRequest request) {
+        Venue venue = venueRepository.findById(venueId)
+                .orElseThrow(() -> new ResourceNotFoundException("Venue no encontrado"));
+        validatePolygon(request.stageShape());
+        venue.setCanvasWidth(request.canvasWidth());
+        venue.setCanvasHeight(request.canvasHeight());
+        venue.setStageShape(request.stageShape());
+        venueRepository.save(venue);
+        return VenueDto.fromEntity(venue, sectionsOf(venue.getId()));
+    }
+
     @Transactional
     public void delete(UUID id) {
         if (!venueRepository.existsById(id)) {
@@ -160,6 +175,30 @@ public class VenueService {
         Section section = Section.builder().venue(venue).name(name).build();
         sectionRepository.save(section);
         return SectionDto.fromEntity(section, 0);
+    }
+
+    /** Actualiza el tipo, la forma (polígono) y el cupo de una sección. */
+    @Transactional
+    public SectionDto updateSectionShape(UUID sectionId, UpdateSectionShapeRequest request) {
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sección no encontrada"));
+        SectionType type;
+        try {
+            type = SectionType.valueOf(request.type());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("Tipo de sección inválido");
+        }
+        validatePolygon(request.shape());
+        if (type == SectionType.GENERAL_ADMISSION
+                && (request.capacity() == null || request.capacity() <= 0)) {
+            throw new BusinessException("Una sección de admisión general requiere un cupo válido");
+        }
+        section.setType(type);
+        section.setShape(request.shape());
+        // El cupo solo tiene sentido en admisión general.
+        section.setCapacity(type == SectionType.GENERAL_ADMISSION ? request.capacity() : null);
+        sectionRepository.save(section);
+        return SectionDto.fromEntity(section, seatRepository.countBySectionId(sectionId));
     }
 
     @Transactional
@@ -256,6 +295,21 @@ public class VenueService {
     }
 
     // ---------- helpers ----------
+
+    /** Valida un polígono opcional: si viene, ha de tener 3+ puntos en rango. */
+    private void validatePolygon(List<Point> polygon) {
+        if (polygon == null || polygon.isEmpty()) {
+            return;
+        }
+        if (polygon.size() < 3) {
+            throw new BusinessException("Un polígono necesita al menos 3 puntos");
+        }
+        for (Point p : polygon) {
+            if (p.x() < 0 || p.y() < 0 || p.x() > 100_000 || p.y() > 100_000) {
+                throw new BusinessException("Coordenadas del polígono fuera de rango");
+            }
+        }
+    }
 
     /**
      * Asigna un índice de orden a cada fila de la sección (existentes + nuevas),

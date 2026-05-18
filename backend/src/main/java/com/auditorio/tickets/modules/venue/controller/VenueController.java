@@ -45,6 +45,12 @@ public class VenueController {
         return venueService.update(id, request);
     }
 
+    @PutMapping("/{id}/canvas")
+    public VenueDto updateCanvas(@PathVariable UUID id,
+                                 @Valid @RequestBody UpdateVenueCanvasRequest request) {
+        return venueService.updateVenueCanvas(id, request);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
@@ -73,6 +79,12 @@ public class VenueController {
     public SectionDto createSection(@PathVariable UUID venueId,
                                     @Valid @RequestBody CreateSectionRequest request) {
         return venueService.createSection(venueId, request);
+    }
+
+    @PutMapping("/sections/{sectionId}/shape")
+    public SectionDto updateSectionShape(@PathVariable UUID sectionId,
+                                         @Valid @RequestBody UpdateSectionShapeRequest request) {
+        return venueService.updateSectionShape(sectionId, request);
     }
 
     @DeleteMapping("/sections/{sectionId}")
