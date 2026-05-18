@@ -3,6 +3,7 @@ package com.auditorio.tickets.modules.ticket.service;
 import com.auditorio.tickets.common.audit.AuditService;
 import com.auditorio.tickets.common.exception.BusinessException;
 import com.auditorio.tickets.common.exception.ResourceNotFoundException;
+import com.auditorio.tickets.modules.event.model.Event;
 import com.auditorio.tickets.modules.event.model.EventSeat;
 import com.auditorio.tickets.modules.event.model.EventSeatStatus;
 import com.auditorio.tickets.modules.event.repository.EventSeatRepository;
@@ -31,17 +32,20 @@ public class TicketService {
     private final EventSeatRepository eventSeatRepository;
     private final QrCodeService qrCodeService;
     private final AuditService auditService;
+    private final TicketEmailService ticketEmailService;
 
     public TicketService(TicketRepository ticketRepository,
                          ReservationRepository reservationRepository,
                          EventSeatRepository eventSeatRepository,
                          QrCodeService qrCodeService,
-                         AuditService auditService) {
+                         AuditService auditService,
+                         TicketEmailService ticketEmailService) {
         this.ticketRepository = ticketRepository;
         this.reservationRepository = reservationRepository;
         this.eventSeatRepository = eventSeatRepository;
         this.qrCodeService = qrCodeService;
         this.auditService = auditService;
+        this.ticketEmailService = ticketEmailService;
     }
 
     /**
@@ -102,7 +106,26 @@ public class TicketService {
         auditService.log(currentUser.getId(), "RESERVATION_CONFIRMED", "reservations",
                 reservation.getId().toString(), ip, userAgent, null);
 
+        // Correo de confirmación con los QR. El envío real es asíncrono dentro
+        // de EmailService, así que un fallo de SMTP no afecta a esta transacción.
+        sendConfirmationEmail(reservation, currentUser, created);
+
         return created.stream().map(TicketDto::fromEntity).toList();
+    }
+
+    /** Extrae los datos planos de los boletos (aún en sesión) y dispara el correo. */
+    private void sendConfirmationEmail(Reservation reservation, User user, List<Ticket> tickets) {
+        List<TicketEmailService.TicketLine> lines = tickets.stream()
+                .map(t -> new TicketEmailService.TicketLine(
+                        t.getEventSeat().getSeat().getSeatCode(),
+                        t.getEventSeat().getSeat().getSection().getName(),
+                        t.getCode().toString() + "." + t.getQrSignature()))
+                .toList();
+        Event event = reservation.getEvent();
+        ticketEmailService.sendConfirmation(
+                user.getEmail(), user.getName(),
+                event.getTitle(), event.getVenue().getName(),
+                event.getStartsAt(), lines);
     }
 
     public List<TicketDto> listMyTickets(User currentUser) {

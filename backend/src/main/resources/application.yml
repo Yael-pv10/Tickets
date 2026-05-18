@@ -67,6 +67,11 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   reservation:
     ttl-minutes: 10
+  mail:
+    # Si está en false, EmailService registra el envío y lo omite (útil en dev/CI sin SMTP).
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:Auditorio Tickets <no-reply@auditorio.local>}
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
   rate-limit:
     public-requests-per-minute: 100
     auth-requests-per-minute: 10
