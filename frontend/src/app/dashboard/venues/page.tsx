@@ -185,8 +185,14 @@ function SectionRow({ section, onChange }: { section: SectionDto; onChange: () =
 
   async function removeSection() {
     if (!confirm(`¿Eliminar la sección "${section.name}"?`)) return;
-    await adminApi.deleteSection(section.id);
-    onChange();
+    setError(null);
+    try {
+      await adminApi.deleteSection(section.id);
+      onChange();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setError(msg ?? 'No se pudo eliminar la sección');
+    }
   }
 
   return (

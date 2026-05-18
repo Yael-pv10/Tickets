@@ -2,6 +2,7 @@ package com.auditorio.tickets.modules.venue.service;
 
 import com.auditorio.tickets.common.exception.BusinessException;
 import com.auditorio.tickets.common.exception.ResourceNotFoundException;
+import com.auditorio.tickets.modules.event.repository.EventSeatRepository;
 import com.auditorio.tickets.modules.venue.dto.*;
 import com.auditorio.tickets.modules.venue.model.Seat;
 import com.auditorio.tickets.modules.venue.model.Section;
@@ -25,13 +26,16 @@ public class VenueService {
     private final VenueRepository venueRepository;
     private final SectionRepository sectionRepository;
     private final SeatRepository seatRepository;
+    private final EventSeatRepository eventSeatRepository;
 
     public VenueService(VenueRepository venueRepository,
                         SectionRepository sectionRepository,
-                        SeatRepository seatRepository) {
+                        SeatRepository seatRepository,
+                        EventSeatRepository eventSeatRepository) {
         this.venueRepository = venueRepository;
         this.sectionRepository = sectionRepository;
         this.seatRepository = seatRepository;
+        this.eventSeatRepository = eventSeatRepository;
     }
 
     public List<VenueDto> listAll() {
@@ -96,6 +100,13 @@ public class VenueService {
     public void deleteSection(UUID sectionId) {
         if (!sectionRepository.existsById(sectionId)) {
             throw new ResourceNotFoundException("Sección no encontrada");
+        }
+        // Los seats referenciados por event_seats tienen FK ON DELETE RESTRICT:
+        // borrar la sección fallaría en BD. Avisamos con un mensaje claro.
+        if (eventSeatRepository.existsBySeat_Section_Id(sectionId)) {
+            throw new BusinessException(
+                    "No se puede eliminar la sección: tiene asientos asignados a uno o más eventos. "
+                            + "Elimina primero esos eventos.");
         }
         sectionRepository.deleteById(sectionId);
     }
